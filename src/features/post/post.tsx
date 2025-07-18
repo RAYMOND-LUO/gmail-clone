@@ -41,6 +41,9 @@ export function LatestPost() {
         await queryClient.invalidateQueries({
           queryKey: trpc.post.latest.queryKey(),
         });
+        await queryClient.invalidateQueries({
+          queryKey: trpc.post.all.queryKey(),
+        });
         setName("");
       },
     })
