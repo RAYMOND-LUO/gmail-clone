@@ -6,6 +6,7 @@ import {
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
+
 import { useTRPC } from "~/trpc/react";
 
 export function LatestPost() {
