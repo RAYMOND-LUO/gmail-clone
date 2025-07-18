@@ -1,4 +1,6 @@
-import HomePageLayout from "./_components/HomePageLayout";
+// The layout.tsx file is used to define the layout for the home route.
+
+import HomeRouteLayout from "./_components/HomeRouteLayout";
 
 export const metadata = {
   title: "Home",
@@ -10,5 +12,5 @@ export default function HomeLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <HomePageLayout>{children}</HomePageLayout>;
+  return <HomeRouteLayout>{children}</HomeRouteLayout>;
 }
