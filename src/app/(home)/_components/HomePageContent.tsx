@@ -8,7 +8,8 @@ import { auth } from "~/server/auth";
 import { trpc } from "~/trpc/server";
 
 export async function HomePageContent() {
-  await new Promise((resolve) => setTimeout(resolve, 10000));
+  // This is to simulate auth loading time
+  await new Promise((resolve) => setTimeout(resolve, 3000));
 
   const session = await auth();
 
