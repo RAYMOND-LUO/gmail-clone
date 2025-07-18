@@ -11,8 +11,24 @@ export async function HomePageContent() {
   await new Promise((resolve) => setTimeout(resolve, 10000));
 
   const session = await auth();
+
   if (!session) {
-    return <div>No session</div>;
+    return (
+      <div className="flex flex-col items-center justify-center gap-4">
+        <div className="text-center">
+          <p className="text-xl text-gray-400">
+            Sign in to create posts and see your content
+          </p>
+        </div>
+
+        <Link
+          href={session ? "/api/auth/signout" : "/api/auth/signin"}
+          className="rounded-full bg-gradient-to-r from-[hsl(280,100%,70%)] to-[hsl(240,100%,70%)] px-8 py-3 font-semibold text-white no-underline transition-all duration-200 hover:scale-105 hover:shadow-lg"
+        >
+          {session ? "Sign out" : "Sign in"}
+        </Link>
+      </div>
+    );
   }
 
   return (
@@ -59,19 +75,13 @@ export async function HomePageContent() {
 
               <div className="flex flex-col items-center justify-center gap-4">
                 <div className="text-center">
-                  {session ? (
-                    <p className="text-xl text-white">
-                      Welcome back,{" "}
-                      <span className="font-semibold text-[hsl(280,100%,70%)]">
-                        {session.user?.name}
-                      </span>
-                      !
-                    </p>
-                  ) : (
-                    <p className="text-xl text-gray-400">
-                      Sign in to create posts and see your content
-                    </p>
-                  )}
+                  <p className="text-xl text-white">
+                    Welcome back,{" "}
+                    <span className="font-semibold text-[hsl(280,100%,70%)]">
+                      {session.user?.name}
+                    </span>
+                    !
+                  </p>
                 </div>
 
                 <Link
