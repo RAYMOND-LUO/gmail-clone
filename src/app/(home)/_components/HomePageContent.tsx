@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { HelloMessage, LatestPost, Posts } from "~/features/post/post";
+import { HelloMessage, LatestPost, Posts } from "~/features/post/components/post";
 import { Await } from "~/features/shared/components/Await";
 import { ErrorMessage } from "~/features/shared/components/ErrorMessage";
 import { LoadingSpinner } from "~/features/shared/components/LoadingSpinner";

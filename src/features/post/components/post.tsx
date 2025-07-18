@@ -1,13 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import {
-  useMutation,
-  useQueryClient,
-  useSuspenseQuery,
-} from "@tanstack/react-query";
+import { useSuspenseQuery } from "@tanstack/react-query";
 
 import { useTRPC } from "~/trpc/react";
+
+import { usePostMutations } from "../hooks/usePostMutations";
 
 export function HelloMessage() {
   const trpc = useTRPC();
@@ -33,21 +31,14 @@ export function LatestPost() {
     trpc.post.latest.queryOptions()
   );
 
-  const queryClient = useQueryClient();
   const [name, setName] = useState("");
-  const createPost = useMutation(
-    trpc.post.create.mutationOptions({
-      onSuccess: async () => {
-        await queryClient.invalidateQueries({
-          queryKey: trpc.post.latest.queryKey(),
-        });
-        await queryClient.invalidateQueries({
-          queryKey: trpc.post.all.queryKey(),
-        });
+  const { createMutation } = usePostMutations({
+    create: {
+      onSuccess: () => {
         setName("");
       },
-    })
-  );
+    },
+  });
 
   return (
     <div className="w-full max-w-md space-y-4">
@@ -67,7 +58,7 @@ export function LatestPost() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          createPost.mutate({ name });
+          createMutation.mutate({ name });
         }}
         className="space-y-3"
       >
@@ -78,15 +69,15 @@ export function LatestPost() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-white placeholder-gray-400 transition-all focus:border-[hsl(280,100%,70%)] focus:ring-2 focus:ring-[hsl(280,100%,70%)]/20 focus:outline-none"
-            disabled={createPost.isPending}
+            disabled={createMutation.isPending}
           />
         </div>
         <button
           type="submit"
           className="w-full rounded-lg bg-gradient-to-r from-[hsl(280,100%,70%)] to-[hsl(240,100%,70%)] px-6 py-3 font-semibold text-white transition-all duration-200 hover:scale-105 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
-          disabled={createPost.isPending || !name.trim()}
+          disabled={createMutation.isPending ?? !name.trim()}
         >
-          {createPost.isPending ? (
+          {createMutation.isPending ? (
             <div className="flex items-center justify-center gap-2">
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"></div>
               Posting...
