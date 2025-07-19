@@ -1,9 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { ReactNode } from "react";
-import { Fragment, Suspense } from "react";
+import { Suspense } from "react";
 import { type TRPCQueryOptions } from "@trpc/tanstack-react-query";
-import { connection } from "next/server";
-import { ErrorBoundary } from "react-error-boundary";
 
 import { HydrateClient, prefetch as prefetchTRPC } from "~/trpc/server";
 
@@ -11,63 +9,45 @@ type AwaitProps<T> =
   | {
       promise: Promise<T>;
       children: (data: T) => ReactNode;
-      fallback?: ReactNode;
-      errorComponent?: ReactNode | null;
-      prefetch?: ReturnType<TRPCQueryOptions<any>>[];
+      fallback: ReactNode;
+      prefetch: ReturnType<TRPCQueryOptions<any>>[];
+      ErrorBoundaryComponent: React.ComponentType<{
+        children: React.ReactNode;
+      }>;
     }
   | {
       promise?: undefined;
       children: ReactNode;
-      fallback?: ReactNode;
-      errorComponent?: ReactNode | null;
-      prefetch?: ReturnType<TRPCQueryOptions<any>>[];
+      fallback: ReactNode;
+      prefetch: ReturnType<TRPCQueryOptions<any>>[];
+      ErrorBoundaryComponent: React.ComponentType<{
+        children: React.ReactNode;
+      }>;
     };
 
 export function Await<T>({
   promise,
   children,
-  fallback = null,
-  errorComponent,
+  fallback,
+  ErrorBoundaryComponent,
   prefetch,
 }: AwaitProps<T>) {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-  const MaybeErrorBoundary = errorComponent ? ErrorBoundary : Fragment;
-
   const innerChildren = promise ? (
     <AwaitResult promise={promise}>{(data) => children(data)}</AwaitResult>
   ) : (
     <>{children}</>
   );
-
-  return (
-    <MaybeErrorBoundary fallback={<>{errorComponent}</>}>
-      <Suspense fallback={<>{fallback}</>}>
-        {prefetch ? (
-          <PrefetchAndHydrate prefetch={prefetch}>
-            {innerChildren}
-          </PrefetchAndHydrate>
-        ) : (
-          innerChildren
-        )}
-      </Suspense>
-    </MaybeErrorBoundary>
-  );
-}
-
-type PrefetchAndHydrateProps = {
-  prefetch: ReturnType<TRPCQueryOptions<any>>[];
-  children: ReactNode;
-};
-
-async function PrefetchAndHydrate({
-  prefetch,
-  children,
-}: PrefetchAndHydrateProps) {
-  await connection(); // opt out of pre-rendering
   prefetch.map((p) => {
     prefetchTRPC(p);
   });
-  return <HydrateClient>{children}</HydrateClient>;
+
+  return (
+    <Suspense fallback={<>{fallback}</>}>
+      <HydrateClient>
+        <ErrorBoundaryComponent>{innerChildren}</ErrorBoundaryComponent>
+      </HydrateClient>
+    </Suspense>
+  );
 }
 
 type AwaitResultProps<T> = {

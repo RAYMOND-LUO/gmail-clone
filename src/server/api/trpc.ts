@@ -14,6 +14,12 @@ import { ZodError } from "zod";
 import { auth } from "~/server/auth";
 import { db } from "~/server/db";
 
+// Register TRPCError with SuperJSON to preserve error types through serialization
+superjson.registerClass(TRPCError, {
+  identifier: "TRPCError",
+  allowProps: ["code", "message", "cause", "name"],
+});
+
 /**
  * 1. CONTEXT
  *

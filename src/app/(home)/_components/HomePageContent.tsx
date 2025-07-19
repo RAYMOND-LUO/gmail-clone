@@ -1,15 +1,19 @@
 import Link from "next/link";
 
-import { HelloMessage, LatestPost, Posts } from "~/features/post/components/post";
+import {
+  HelloMessage,
+  LatestPost,
+  Posts,
+} from "~/features/post/components/post";
+import PostErrorBoundary from "~/features/post/components/PostErrorBoundary";
 import { Await } from "~/features/shared/components/Await";
-import { ErrorMessage } from "~/features/shared/components/ErrorMessage";
 import { LoadingSpinner } from "~/features/shared/components/LoadingSpinner";
 import { auth } from "~/server/auth";
 import { trpc } from "~/trpc/server";
 
 export async function HomePageContent() {
   // This is to simulate auth loading time
-  await new Promise((resolve) => setTimeout(resolve, 3000));
+  // await new Promise((resolve) => setTimeout(resolve, 3000));
 
   const session = await auth();
 
@@ -36,13 +40,13 @@ export async function HomePageContent() {
     <>
       {/* Main Content */}
       <Await
+        fallback={<LoadingSpinner />}
         prefetch={[
           trpc.post.all.queryOptions(),
           trpc.post.latest.queryOptions(),
           trpc.post.hello.queryOptions({ text: "from tRPC" }),
         ]}
-        fallback={<LoadingSpinner />}
-        errorComponent={<ErrorMessage />}
+        ErrorBoundaryComponent={PostErrorBoundary}
       >
         <div className="mx-auto max-w-6xl">
           {/* Posts Section */}

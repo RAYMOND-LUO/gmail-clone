@@ -1,5 +1,6 @@
 "use client";
 
+import type { Post } from "@prisma/client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -8,15 +9,15 @@ import { useTRPC } from "~/trpc/react";
 type PostMutationsOptions = {
   create?: {
     onSuccess?: () => void;
-    onError?: (error: unknown) => void;
+    onError?: () => void;
   };
   update?: {
-    onSuccess?: (id: string) => void;
-    onError?: (error: unknown) => void;
+    onSuccess?: (id: Post["id"]) => void;
+    onError?: () => void;
   };
   delete?: {
-    onSuccess?: (id: string) => void;
-    onError?: (error: unknown) => void;
+    onSuccess?: (id: Post["id"]) => void;
+    onError?: () => void;
   };
 };
 
@@ -42,8 +43,10 @@ export function usePostMutations(options: PostMutationsOptions = {}) {
         options.create?.onSuccess?.();
       },
       onError: (error) => {
-        toast.error("Failed to create post");
-        options.create?.onError?.(error);
+        toast.error("Failed to create post", {
+          description: error.message,
+        });
+        options.create?.onError?.();
       },
     })
   );
