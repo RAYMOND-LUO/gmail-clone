@@ -5,7 +5,7 @@ import React from "react";
 import { isTRPCClientError } from "@trpc/client";
 import Link from "next/link";
 
-import ReusableErrorBoundary from "~/features/shared/components/ErrorBoundary";
+import ReusableErrorBoundary from "~/features/shared/components/ReusableErrorBoundary";
 
 export default function PostErrorBoundary({
   children,
