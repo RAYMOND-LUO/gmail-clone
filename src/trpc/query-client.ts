@@ -13,9 +13,10 @@ export const createQueryClient = () =>
         // With SSR, we usually want to set some default staleTime
         // above 0 to avoid refetching immediately on the client
         staleTime: 30 * 1000,
-        retry: false, // Set for prefetch to not retry on error so we can see the error in the UI immediately
+        // Set to retry on error once so we always get TRPCClientError on the client
+        retry: 1,
+        // Throw on error if the query has no data, so we can see the error in the UI immediately
         throwOnError: (error, query) => {
-          console.log("throwOnError", error, query);
           return typeof query.state.data === "undefined";
         },
       },
@@ -38,6 +39,7 @@ export const createQueryClient = () =>
       },
     },
     queryCache: new QueryCache({
+      // If we already have data in cache and query errors, show the toast error
       onError: (error, query) => {
         if (typeof query.state.data !== "undefined") {
           toast.error(error.message);
