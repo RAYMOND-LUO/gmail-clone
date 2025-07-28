@@ -3,7 +3,6 @@ import { getHTTPStatusCodeFromError } from "@trpc/server/http";
 
 import { appRouter } from "~/server/api/root";
 import { createTRPCContext } from "~/server/api/trpc";
-import { auth } from "~/server/auth";
 
 /**
  * Configure basic CORS headers
@@ -24,7 +23,7 @@ export const OPTIONS = () => {
   return response;
 };
 
-const handler = auth(async (req) => {
+const handler = async (req: Request) => {
   const response = await fetchRequestHandler({
     endpoint: "/api/trpc",
     router: appRouter,
@@ -42,6 +41,6 @@ const handler = auth(async (req) => {
 
   setCorsHeaders(response);
   return response;
-});
+};
 
 export { handler as GET, handler as POST };
