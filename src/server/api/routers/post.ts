@@ -5,6 +5,7 @@ import {
   protectedProcedure,
   publicProcedure,
 } from "~/server/api/trpc";
+import { CreatePostInputSchema } from "~/services/post/service";
 
 export const postRouter = createTRPCRouter({
   hello: publicProcedure
@@ -16,29 +17,22 @@ export const postRouter = createTRPCRouter({
     }),
 
   create: protectedProcedure
-    .input(z.object({ name: z.string().min(1) }))
+    .input(CreatePostInputSchema.pick({ name: true }))
     .mutation(async ({ ctx, input }) => {
-      return ctx.db.post.create({
-        data: {
-          name: input.name,
-          createdBy: { connect: { id: ctx.session.user.id } },
-        },
+      return ctx.postService.createPost({
+        name: input.name,
+        createdById: ctx.session.user.id,
       });
     }),
 
   latest: protectedProcedure.query(async ({ ctx }) => {
-    const post = await ctx.db.post.findFirst({
-      orderBy: { createdAt: "desc" },
-      where: { createdBy: { id: ctx.session.user.id } },
-    });
+    const post = await ctx.postService.getLatestPost();
 
-    return post ?? null;
+    return post;
   }),
 
-  all: publicProcedure.query(async ({ ctx }) => {
-    return ctx.db.post.findMany({
-      orderBy: { createdAt: "desc" },
-    });
+  all: protectedProcedure.query(async ({ ctx }) => {
+    return ctx.postService.getAllPosts();
   }),
 
   getSecretMessage: protectedProcedure.query(() => {

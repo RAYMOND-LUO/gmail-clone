@@ -14,6 +14,8 @@ import { ZodError } from "zod";
 import { auth } from "~/server/auth";
 import { db } from "~/server/db";
 
+import { injectProtectedServices } from "./inject";
+
 // Register TRPCError with SuperJSON to preserve error types through serialization
 superjson.registerClass(TRPCError, {
   identifier: "TRPCError",
@@ -130,8 +132,11 @@ export const protectedProcedure = t.procedure
     if (!ctx.session?.user) {
       throw new TRPCError({ code: "UNAUTHORIZED" });
     }
+
+    const protectedServices = injectProtectedServices();
     return next({
       ctx: {
+        ...protectedServices,
         // infers the `session` as non-nullable
         session: { ...ctx.session, user: ctx.session.user },
       },
