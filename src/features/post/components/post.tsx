@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 
+import { Input } from "~/features/shared/components/ui/input";
 import { useTRPC } from "~/trpc/react";
+import { type PostWithUser } from "~/types/post";
 
 import { usePostMutations } from "../hooks/usePostMutations";
 
@@ -44,16 +46,7 @@ export function LatestPost() {
     <div className="w-full max-w-md space-y-4">
       <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-center">
         {latestPost ? (
-          <div>
-            <p className="mb-1 text-sm text-gray-400">Your most recent post:</p>
-            <p className="truncate text-lg font-semibold text-white">
-              {latestPost.name}
-            </p>
-            <p className="text-gray-400">
-              Created by: {latestPost.createdBy.name}
-            </p>
-            <p className="text-gray-400">Email: {latestPost.createdBy.email}</p>
-          </div>
+          <PostsWithUser post={latestPost} />
         ) : (
           <p className="text-gray-400">You have no posts yet.</p>
         )}
@@ -67,7 +60,7 @@ export function LatestPost() {
         className="space-y-3"
       >
         <div>
-          <input
+          <Input
             type="text"
             placeholder="What's on your mind?"
             value={name}
@@ -135,6 +128,76 @@ export function Posts() {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Component that fetches and displays a single post by ID
+ * Only queries when user submits an ID
+ */
+export function GetPost() {
+  const trpc = useTRPC();
+  const [id, setId] = useState("");
+
+  const {
+    data: post,
+    isEnabled,
+    isPending,
+  } = useQuery(trpc.post.getById.queryOptions({ id }, { enabled: !!id }));
+
+  return (
+    <div className="w-full max-w-md space-y-4">
+      {post && (
+        <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-center">
+          <PostsWithUser post={post} showPostId />
+        </div>
+      )}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          const formData = new FormData(e.target as HTMLFormElement);
+          const id = formData.get("id") as string;
+          setId(id);
+        }}
+        className="space-y-3"
+      >
+        <Input
+          type="text"
+          placeholder="Enter post ID"
+          name="id"
+          className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-white placeholder-gray-400"
+        />
+        <button
+          type="submit"
+          className="w-full rounded-lg bg-gradient-to-r from-[hsl(280,100%,70%)] to-[hsl(240,100%,70%)] px-6 py-3 font-semibold text-white transition-all duration-200 hover:scale-105 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+          disabled={isEnabled && isPending}
+        >
+          Get Post
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function PostsWithUser({
+  post,
+  showPostId = false,
+}: {
+  post: PostWithUser;
+  showPostId?: boolean;
+}) {
+  return (
+    <div>
+      <p className="mb-1 text-sm text-gray-400">
+        {showPostId ? `Post ID: ${post.id}` : "Your most recent post:"}
+      </p>
+      <p className="truncate text-lg font-semibold text-white">{post.name}</p>
+      <p className="text-gray-400">Created by: {post.createdBy.name}</p>
+      <p className="text-gray-400">Email: {post.createdBy.email}</p>
+      <p className="mt-2 text-sm text-gray-500">
+        Created on: {new Date(post.createdAt).toLocaleDateString()}
+      </p>
     </div>
   );
 }

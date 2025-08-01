@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import type { Post, PostWithUser } from "~/types/post";
+import { TRPCError } from "@trpc/server";
 import { type z } from "zod";
 
 import {
@@ -12,7 +13,7 @@ import { PostWithUserSchema } from "~/types/post";
 /**
  * Input validation schema for creating posts
  * Derives from domain schema to ensure consistency
- * 
+ *
  * Use case: Validate input data before processing
  */
 export const CreatePostInputSchema = PostWithUserSchema.pick({
@@ -27,25 +28,25 @@ type CreatePostInput = z.infer<typeof CreatePostInputSchema>;
  * - Easy mocking for tests
  * - Multiple implementations (e.g., different databases)
  * - Clear API documentation
- * 
+ *
  * Use case: Define what operations are available for posts
  */
 export interface PostService {
   createPost(post: CreatePostInput): Promise<Post>;
-  getLatestPost(): Promise<PostWithUser>;
-  getPost(id: string): Promise<Post>;
+  getLatestPost(): Promise<PostWithUser | null>;
+  getPost(id: string): Promise<PostWithUser>;
   getAllPosts(): Promise<Post[]>;
 }
 
 /**
  * Concrete implementation of PostService using Prisma
  * Demonstrates dependency injection pattern
- * 
+ *
  * Benefits:
  * - Database client is injected, not imported
  * - Easy to test with mock database
  * - Can swap database implementations
- * 
+ *
  * Use cases:
  * - Production: Inject real PrismaClient
  * - Testing: Inject mock PrismaClient
@@ -73,25 +74,36 @@ export class PostServiceImpl implements PostService {
    * Fetches the most recent post with author details
    * Demonstrates using predefined queries and mappings
    */
-  async getLatestPost(): Promise<PostWithUser> {
-    const post = await this.db.post.findFirstOrThrow({
+  async getLatestPost(): Promise<PostWithUser | null> {
+    const post = await this.db.post.findFirst({
       orderBy: { createdAt: "desc" },
       include: PostWithUserQuery.include,
     });
+
+    if (!post) {
+      return null;
+    }
 
     return PrismaPostWithUserToPostWithUser(post);
   }
 
   /**
    * Fetches a single post by ID
-   * Shows error handling with findUniqueOrThrow
+   * Shows error handling with findUnique and manually throwing TRPCError
    */
-  async getPost(id: string): Promise<Post> {
-    const post = await this.db.post.findUniqueOrThrow({
+  async getPost(id: string): Promise<PostWithUser> {
+    const post = await this.db.post.findUnique({
       where: { id: Number(id) },
+      include: PostWithUserQuery.include,
     });
 
-    return PrismaPostToPost(post);
+    if (!post) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+      });
+    }
+
+    return PrismaPostWithUserToPostWithUser(post);
   }
 
   /**
@@ -110,10 +122,10 @@ export class PostServiceImpl implements PostService {
 /**
  * Factory function for creating PostService instances
  * This is the dependency injection entry point
- * 
- * Use case: 
+ *
+ * Use case:
  * const postService = getPostService(prismaClient);
- * 
+ *
  * Testing example:
  * const mockDb = createMockPrismaClient();
  * const testService = getPostService(mockDb);

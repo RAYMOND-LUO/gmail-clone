@@ -39,12 +39,20 @@ function PostErrorMessage({
               The posts you are looking for does not exist or you do not have
               permission to view it.
             </p>
-            <Link
-              href="/"
-              className="mt-2 inline-block rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-            >
-              Go to Home
-            </Link>
+            <div className="flex gap-2">
+              <Link
+                href="/"
+                className="mt-2 inline-block rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                Go to Home
+              </Link>
+              <button
+                onClick={resetErrorBoundary}
+                className="mt-2 inline-block rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                Try again
+              </button>
+            </div>
           </div>
         );
       case "UNAUTHORIZED":

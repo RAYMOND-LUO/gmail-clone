@@ -1,17 +1,17 @@
 /**
  * Page Orchestration Component
- * 
+ *
  * This component lives in _components because it handles:
  * - Page structure and layout decisions
  * - Data fetching coordination (what to prefetch)
  * - Loading state management
  * - Error boundary setup
  * - Authentication-based rendering logic
- * 
- * Notice: All business logic components (Posts, LatestPost, etc.) 
+ *
+ * Notice: All business logic components (Posts, LatestPost, etc.)
  * are imported from the features folder. This component only
  * orchestrates how they work together.
- * 
+ *
  * Pattern Benefits:
  * - Clear separation between layout and business logic
  * - Easy to understand page structure at a glance
@@ -21,6 +21,7 @@
 import Link from "next/link";
 
 import {
+  GetPost,
   HelloMessage,
   LatestPost,
   Posts,
@@ -95,10 +96,17 @@ export async function HomePageContent() {
           {session?.user && (
             <div className="mb-12">
               <h2 className="mb-6 text-center text-3xl font-bold">
-                Create a Post
+                Create a Post or Get a Post
               </h2>
               <div className="flex justify-center rounded-xl bg-white/5 p-6 backdrop-blur-sm">
-                <LatestPost />
+                <div className="w-[500px]">
+                  <LatestPost />
+                </div>
+                <div className="w-[500px]">
+                  <PostErrorBoundary>
+                    <GetPost />
+                  </PostErrorBoundary>
+                </div>
               </div>
             </div>
           )}

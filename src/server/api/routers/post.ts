@@ -40,6 +40,12 @@ export const postRouter = createTRPCRouter({
     return ctx.postService.getAllPosts();
   }),
 
+  getById: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.postService.getPost(input.id);
+    }),
+
   getSecretMessage: protectedProcedure.query(() => {
     return "you can now see this secret message!";
   }),
