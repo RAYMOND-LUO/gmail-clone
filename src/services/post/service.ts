@@ -1,19 +1,22 @@
 import type { PrismaClient } from "@prisma/client";
-import type { Post } from "~/types/post";
+import type { Post, PostWithUser } from "~/types/post";
 import { type z } from "zod";
 
-import { prismaPost, prismaPostToPost } from "~/mappings/post";
-import { PostSchema } from "~/types/post";
+import {
+  PostWithUserQuery,
+  PrismaPostToPost,
+  PrismaPostWithUserToPostWithUser,
+} from "~/mappings/post";
+import { PostWithUserSchema } from "~/types/post";
 
-export const CreatePostInputSchema = PostSchema.pick({
+export const CreatePostInputSchema = PostWithUserSchema.pick({
   name: true,
-  createdById: true,
+  createdBy: true,
 });
 type CreatePostInput = z.infer<typeof CreatePostInputSchema>;
-
 export interface PostService {
   createPost(post: CreatePostInput): Promise<Post>;
-  getLatestPost(): Promise<Post>;
+  getLatestPost(): Promise<PostWithUser>;
   getPost(id: string): Promise<Post>;
   getAllPosts(): Promise<Post[]>;
 }
@@ -25,39 +28,36 @@ export class PostServiceImpl implements PostService {
     const post = await this.db.post.create({
       data: {
         name: input.name,
-        createdBy: { connect: { id: input.createdById } },
+        createdBy: { connect: { id: input.createdBy.id } },
       },
-      include: prismaPost.include,
     });
 
-    return prismaPostToPost(post);
+    return PrismaPostToPost(post);
   }
 
-  async getLatestPost(): Promise<Post> {
+  async getLatestPost(): Promise<PostWithUser> {
     const post = await this.db.post.findFirstOrThrow({
       orderBy: { createdAt: "desc" },
-      include: prismaPost.include,
+      include: PostWithUserQuery.include,
     });
 
-    return prismaPostToPost(post);
+    return PrismaPostWithUserToPostWithUser(post);
   }
 
   async getPost(id: string): Promise<Post> {
     const post = await this.db.post.findUniqueOrThrow({
       where: { id: Number(id) },
-      include: prismaPost.include,
     });
 
-    return prismaPostToPost(post);
+    return PrismaPostToPost(post);
   }
 
   async getAllPosts(): Promise<Post[]> {
     const posts = await this.db.post.findMany({
       orderBy: { createdAt: "desc" },
-      include: prismaPost.include,
     });
 
-    return posts.map(prismaPostToPost);
+    return posts.map(PrismaPostToPost);
   }
 }
 

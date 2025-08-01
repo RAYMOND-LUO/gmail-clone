@@ -21,7 +21,12 @@ export const postRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       return ctx.postService.createPost({
         name: input.name,
-        createdById: ctx.session.user.id,
+        createdBy: {
+          id: ctx.session.user.id,
+          name: ctx.session.user.name ?? "",
+          email: ctx.session.user.email ?? "",
+          image: ctx.session.user.image ?? "",
+        },
       });
     }),
 

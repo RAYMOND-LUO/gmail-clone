@@ -1,20 +1,32 @@
-import type { Post } from "~/types/post";
+import type { Post, PostWithUser } from "~/types/post";
 import { Prisma } from "@prisma/client";
 
-export const prismaPost = Prisma.validator<Prisma.PostDefaultArgs>()({
+import { PrismaUserToUser, UserQuery } from "./user";
+
+export const PostQuery = Prisma.validator<Prisma.PostDefaultArgs>()({});
+
+export const PostWithUserQuery = Prisma.validator<Prisma.PostDefaultArgs>()({
   include: {
-    createdBy: true,
+    createdBy: UserQuery,
   },
 });
 
-export const prismaPostToPost = (
-  post: Prisma.PostGetPayload<typeof prismaPost>
+export const PrismaPostToPost = (
+  post: Prisma.PostGetPayload<typeof PostQuery>
 ): Post => {
   return {
     id: post.id,
     name: post.name,
     createdAt: post.createdAt,
     updatedAt: post.updatedAt,
-    createdById: post.createdBy.id,
+  };
+};
+
+export const PrismaPostWithUserToPostWithUser = (
+  post: Prisma.PostGetPayload<typeof PostWithUserQuery>
+): PostWithUser => {
+  return {
+    ...PrismaPostToPost(post),
+    createdBy: PrismaUserToUser(post.createdBy),
   };
 };

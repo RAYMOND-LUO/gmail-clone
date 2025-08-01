@@ -49,6 +49,10 @@ export function LatestPost() {
             <p className="truncate text-lg font-semibold text-white">
               {latestPost.name}
             </p>
+            <p className="text-gray-400">
+              Created by: {latestPost.createdBy.name}
+            </p>
+            <p className="text-gray-400">Email: {latestPost.createdBy.email}</p>
           </div>
         ) : (
           <p className="text-gray-400">You have no posts yet.</p>
