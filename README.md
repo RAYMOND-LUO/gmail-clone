@@ -46,7 +46,29 @@ features/
 - **Scalability**: New features don't bloat existing folders
 - **Team Collaboration**: Different teams can work on different features without conflicts
 
-#### 4. Dependency Injection Pattern (Backend Services)
+#### 4. Route Layout Components (`src/app/(route)/_components/`)
+The `_components` folders within app routes are specifically for layout and page orchestration components. These components handle:
+- Page structure and layout
+- Data fetching coordination
+- Loading states management
+- Error boundaries setup
+
+**Key Pattern**: Business logic components live in `features/`, while route `_components/` focus on composition and orchestration.
+
+#### 5. SSR Streaming Pattern with Suspense
+The template includes a custom `Await` component that implements React's streaming SSR pattern:
+- **Server-side prefetching**: Data is fetched on the server
+- **Progressive enhancement**: UI streams to the client as data becomes available
+- **Built-in error handling**: Each suspended component has its own error boundary
+- **Type-safe data fetching**: Full TypeScript support with tRPC
+
+**Benefits:**
+- **Improved performance**: Users see content faster with streaming
+- **Better UX**: Loading states are granular and contextual
+- **SEO friendly**: Content is server-rendered
+- **Resilient**: Errors in one component don't break the entire page
+
+#### 6. Dependency Injection Pattern (Backend Services)
 Backend services use dependency injection for better testability and flexibility. Services are injected with their dependencies (like database clients) rather than importing them directly.
 
 **Benefits:**
