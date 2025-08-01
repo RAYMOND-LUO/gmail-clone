@@ -1,3 +1,31 @@
+/**
+ * Feature-based custom hook for post mutations
+ * Demonstrates the frontend feature organization pattern
+ * 
+ * This hook encapsulates:
+ * - All post-related mutations (create, update, delete)
+ * - Cache invalidation logic
+ * - Toast notifications
+ * - Error handling
+ * 
+ * Benefits:
+ * - Reusable across components
+ * - Centralized mutation logic
+ * - Consistent UX patterns
+ * - Easy to test
+ * 
+ * Use cases:
+ * - Creating posts in forms
+ * - Updating posts in editors
+ * - Deleting posts from lists
+ * 
+ * Example usage:
+ * const { createMutation } = usePostMutations({
+ *   create: {
+ *     onSuccess: () => router.push('/posts')
+ *   }
+ * });
+ */
 "use client";
 
 import type { Post } from "@prisma/client";
@@ -25,10 +53,15 @@ export function usePostMutations(options: PostMutationsOptions = {}) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
 
+  /**
+   * Create mutation with optimistic updates and cache invalidation
+   * Shows how tRPC integrates with React Query
+   */
   const createMutation = useMutation(
     trpc.post.create.mutationOptions({
       onSuccess: async () => {
         // Invalidate related queries to refresh the data
+        // This ensures UI shows latest data after creation
         await Promise.all([
           queryClient.invalidateQueries({
             queryKey: trpc.post.all.queryKey(),
