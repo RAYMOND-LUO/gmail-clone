@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 import { Button } from "~/components/ui/button";
 
@@ -17,21 +18,23 @@ import { Button } from "~/components/ui/button";
  */
 export function Sidebar() {
   return (
-    <div className="w-64 border-r border-gray-200 bg-white">
+    <div className="w-[256px] flex flex-shrink-0 bg-[#f8fafe]">
       <div className="p-4">
         {/* Gmail Logo and Menu */}
         <div className="flex items-center space-x-4 mb-6">
           <Button variant="ghost" size="icon" className="h-10 w-10">
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"></path>
             </svg>
           </Button>
-          <div className="text-2xl font-bold text-red-500">Gmail</div>
+          <Image src="/gmail_logo.png" alt="Gmail logo" width={109} height={40} />
         </div>
 
         {/* Compose Button */}
-        <Button className="w-full justify-start mb-6 bg-blue-600 hover:bg-blue-700 text-white">
-          <svg className="mr-3 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <Button
+          className="flex items-center justify-start mb-6 w-[142px] h-[56px] bg-[#c2e7ff] text-black cursor-pointer hover:bg-[#9ecdec] hover:text-black"
+        >
+          <svg className="mr-2 ml-1 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
           Compose
@@ -39,7 +42,7 @@ export function Sidebar() {
 
         {/* Navigation */}
         <nav className="space-y-1">
-          <Button variant="secondary" className="w-full justify-start" size="sm">
+          <Button variant="secondary" className="w-full justify-start bg-[#d4e3fd] hover:bg-[#cbe4f5]" size="sm">
             <svg className="mr-3 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
@@ -78,10 +81,10 @@ export function Sidebar() {
         </nav>
 
         {/* Sign out link */}
-        <div className="mt-8 pt-4 border-t border-gray-200">
+        <div className="flex w-full mt-8 pt-4 border-t border-gray-200">
           <Link
             href="/api/auth/signout"
-            className="text-sm text-gray-600 hover:text-gray-800"
+            className="text-md mx-auto text-gray-600 hover:text-gray-800"
           >
             Sign out
           </Link>

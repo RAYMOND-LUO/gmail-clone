@@ -2,12 +2,12 @@ import { Button } from "~/components/ui/button";
 
 /**
  * EmailTabs Component
- * 
+ *
  * This component handles:
  * - Email category tabs (Primary, Promotions, Social, Updates)
  * - Active tab highlighting
  * - Tab switching functionality
- * 
+ *
  * Benefits:
  * - Reusable across different email views
  * - Centralized tab logic
@@ -15,29 +15,29 @@ import { Button } from "~/components/ui/button";
  */
 export function EmailTabs() {
   return (
-    <div className="border-b border-gray-200 bg-white">
-      <div className="flex">
-        <Button 
-          variant="ghost" 
-          className="rounded-none border-b-2 border-b-blue-500 text-blue-600 font-medium px-6 py-3"
+    <div className="h-[56px] bg-white">
+      <div className="flex h-full">
+        <Button
+          variant="ghost"
+          className="flex h-full w-[213px] justify-start rounded-none border-b-2 border-b-blue-500 px-6 py-3 font-medium text-blue-600"
         >
           Primary
         </Button>
-        <Button 
-          variant="ghost" 
-          className="rounded-none text-gray-600 hover:text-gray-900 px-6 py-3"
+        <Button
+          variant="ghost"
+          className="flex h-full w-[213px] justify-start rounded-none px-6 py-3 text-gray-600 hover:text-gray-900"
         >
           Promotions
         </Button>
-        <Button 
-          variant="ghost" 
-          className="rounded-none text-gray-600 hover:text-gray-900 px-6 py-3"
+        <Button
+          variant="ghost"
+          className="flex h-full w-[213px] justify-start rounded-none px-6 py-3 text-gray-600 hover:text-gray-900"
         >
           Social
         </Button>
-        <Button 
-          variant="ghost" 
-          className="rounded-none text-gray-600 hover:text-gray-900 px-6 py-3"
+        <Button
+          variant="ghost"
+          className="flex h-full w-[213px] justify-start rounded-none px-6 py-3 text-gray-600 hover:text-gray-900"
         >
           Updates
         </Button>
