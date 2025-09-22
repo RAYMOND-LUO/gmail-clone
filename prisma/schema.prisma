@@ -13,6 +13,7 @@ datasource db {
   // https://www.prisma.io/docs/reference/api-reference/prisma-schema-reference#string
   url      = env("DATABASE_URL")
 }
+
 // Necessary for Next auth
 model Account {
   id                       String  @id @default(cuid())
@@ -42,14 +43,17 @@ model Session {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  accounts      Account[]
-  sessions      Session[]
-  posts         Post[]
+  id              String           @id @default(cuid())
+  name            String?
+  email           String?          @unique
+  emailVerified   DateTime?
+  image           String?
+  accounts        Account[]
+  sessions        Session[]
+  posts           Post[]
+  emailThreads    EmailThread[]
+  emailMessages   EmailMessage[]
+  gmailSyncStates GmailSyncState[]
 }
 
 model VerificationToken {
@@ -72,3 +76,92 @@ model Post {
   @@index([name])
 }
 
+// One Gmail thread (conversation). Lightweight; Messages carry the heavy content.
+model EmailThread {
+  id            String    @id @default(cuid())
+  userId        String
+  gmailThreadId String // e.g. "176e3b4…"
+  subject       String? // latest known subject
+  lastMessageAt DateTime? // for sorting inbox
+
+  // denormalized helpers
+  snippet String? @db.Text
+
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages EmailMessage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  isRead      Boolean @default(false)
+  isStarred   Boolean @default(false)
+  isImportant Boolean @default(false)
+
+  @@unique([userId, gmailThreadId])
+  @@index([userId, lastMessageAt])
+  @@index([userId, isRead, lastMessageAt])
+  @@index([userId, isStarred])
+}
+
+// One email message within a thread.
+model EmailMessage {
+  id             String   @id @default(cuid())
+  userId         String
+  threadId       String
+  gmailMessageId String // e.g. "1862a9c…"
+  internalDate   DateTime // Gmail internalDate
+  // basic headers
+  from           String?
+  to             String? // comma-separated; keep it simple
+  cc             String?
+  bcc            String?
+  subject        String?
+  snippet        String?  @db.Text
+  // storage
+  // rawS3Key       String? // s3 key to raw RFC822 if you store it
+  // htmlS3Key      String? // s3 key to sanitized HTML body
+  // textPlain      String?  @db.Text // optional: quick search/snippet
+  // mimeType       String? // top-level mime type (e.g. multipart/alternative)
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  thread      EmailThread  @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  attachments Attachment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, gmailMessageId])
+  @@index([threadId, internalDate])
+  @@index([userId, subject])
+}
+
+// File attachments (inline or regular).
+model Attachment {
+  id        String  @id @default(cuid())
+  messageId String
+  filename  String?
+  mimeType  String?
+  sizeBytes Int?
+  s3Key     String // where the file lives
+  inlineCid String? // for inline images referenced by <img cid=...>
+
+  message EmailMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+// Track Gmail history & cursors for each linked account (per user).
+model GmailSyncState {
+  id            String    @id @default(cuid())
+  userId        String
+  provider      String // e.g. "google"
+  email         String // the Gmail address
+  historyId     String? // last synced Gmail historyId
+  lastFullSync  DateTime?
+  lastDeltaSync DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider, email])
+  @@index([email])
+}
