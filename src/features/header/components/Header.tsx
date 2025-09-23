@@ -1,11 +1,7 @@
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
-
-interface HeaderProps {
-  userName?: string;
-  userImage?: string;
-}
+import type { HeaderProps } from "~/types/components";
 
 /**
  * Header Component

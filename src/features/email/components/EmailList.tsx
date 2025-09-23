@@ -1,19 +1,7 @@
 import { Button } from "~/components/ui/button";
+import type { Email, EmailListProps } from "~/types/components";
 
 import { EmailTabs } from "./EmailTabs";
-
-interface Email {
-  from: string;
-  subject: string;
-  snippet: string;
-  time: string;
-  unread: boolean;
-  starred?: boolean;
-}
-
-interface EmailListProps {
-  emails?: Email[];
-}
 
 /**
  * EmailList Component

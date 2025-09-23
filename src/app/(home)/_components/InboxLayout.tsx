@@ -1,11 +1,7 @@
 import { Sidebar } from "~/features/sidebar/components/Sidebar";
 import { Header } from "~/features/header/components/Header";
 import { EmailList } from "~/features/email/components/EmailList";
-
-interface InboxLayoutProps {
-  userName?: string;
-  userImage?: string;
-}
+import type { InboxLayoutProps } from "~/types/components";
 
 export function InboxLayout({ userName, userImage }: InboxLayoutProps) {
   return (
