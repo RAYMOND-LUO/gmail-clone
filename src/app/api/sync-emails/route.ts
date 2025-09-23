@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     
     // Optional: Add basic authentication for security
     const authHeader = request.headers.get('authorization');
-    const expectedAuth = env.CRON_SHARED_SECRET;
+    const expectedAuth = process.env.CRON_SHARED_SECRET!;
     
     if (expectedAuth && authHeader !== `Bearer ${expectedAuth}`) {
       return NextResponse.json(
