@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { syncAllUsersEmails } from "~/services/gmail/sync";
+import { getGmailService } from "~/services/gmail/service";
+import { db } from "~/server/db";
 import { env } from "~/env";
 
 /**
@@ -30,8 +31,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Start the sync process
-    const result = await syncAllUsersEmails();
+    // Start the sync process using dependency injection
+    const gmailService = getGmailService(db);
+    const result = await gmailService.syncAllUsersEmails();
     
     return NextResponse.json({
       success: true,

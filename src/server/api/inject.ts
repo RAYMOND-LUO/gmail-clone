@@ -14,6 +14,7 @@
  * - Development: Debug-enabled services
  */
 import { getPostService } from "~/services/post/service";
+import { getGmailService } from "~/services/gmail/service";
 
 import { db } from "../db";
 
@@ -29,9 +30,11 @@ import { db } from "../db";
  */
 export function injectProtectedServices() {
   const postService = getPostService(db);
+  const gmailService = getGmailService(db);
 
   return {
     postService,
+    gmailService,
   };
 }
 

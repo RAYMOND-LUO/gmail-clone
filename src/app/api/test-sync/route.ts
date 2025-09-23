@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { syncAllUsersEmails } from "~/services/gmail/sync";
+import { getGmailService } from "~/services/gmail/service";
+import { db } from "~/server/db";
 
 /**
  * Test Gmail Sync Endpoint
@@ -19,7 +20,8 @@ export async function GET() {
 
   try {
     console.log('Manual Gmail sync test started');
-    const result = await syncAllUsersEmails();
+    const gmailService = getGmailService(db);
+    const result = await gmailService.syncAllUsersEmails();
     
     return NextResponse.json({
       success: true,
