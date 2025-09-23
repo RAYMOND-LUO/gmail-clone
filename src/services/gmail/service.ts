@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient, EmailMessage } from "@prisma/client";
 import { google } from "googleapis";
 
 /**
@@ -10,6 +10,9 @@ import { google } from "googleapis";
 export interface GmailService {
   syncUserEmails(userId: string, maxPages?: number, messagesPerPage?: number): Promise<SyncResult>;
   syncAllUsersEmails(): Promise<AllUsersSyncResult>;
+  getAllEmails(): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean } })[]>;
+  getUserEmails(userId: string): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean } })[]>;
+  getEmailById(id: string): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean } }) | null>;
 }
 
 export interface SyncResult {
@@ -442,6 +445,66 @@ export class GmailServiceImpl implements GmailService {
       totalErrors,
       totalPages,
     };
+  }
+
+  /**
+   * Get all emails from database
+   */
+  async getAllEmails(): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean } })[]> {
+    return this.db.emailMessage.findMany({
+      include: {
+        thread: {
+          select: {
+            isRead: true,
+            isStarred: true,
+          },
+        },
+      },
+      orderBy: {
+        internalDate: 'desc',
+      },
+    });
+  }
+
+  /**
+   * Get emails for a specific user
+   */
+  async getUserEmails(userId: string): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean } })[]> {
+    return this.db.emailMessage.findMany({
+      where: {
+        userId,
+      },
+      include: {
+        thread: {
+          select: {
+            isRead: true,
+            isStarred: true,
+          },
+        },
+      },
+      orderBy: {
+        internalDate: 'desc',
+      },
+    });
+  }
+
+  /**
+   * Get a specific email by ID
+   */
+  async getEmailById(id: string): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean } }) | null> {
+    return this.db.emailMessage.findUnique({
+      where: {
+        id,
+      },
+      include: {
+        thread: {
+          select: {
+            isRead: true,
+            isStarred: true,
+          },
+        },
+      },
+    });
   }
 }
 

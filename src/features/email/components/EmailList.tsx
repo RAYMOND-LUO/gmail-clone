@@ -1,7 +1,15 @@
 import { Button } from "~/components/ui/button";
-import type { Email, EmailListProps } from "~/types/components";
+import type { Email } from "~/types/components";
+import type { EmailMessage } from "@prisma/client";
 
 import { EmailTabs } from "./EmailTabs";
+
+type EmailWithThread = EmailMessage & {
+  thread: {
+    isRead: boolean;
+    isStarred: boolean;
+  };
+};
 
 /**
  * EmailList Component
@@ -11,7 +19,25 @@ import { EmailTabs } from "./EmailTabs";
  * - Email interaction states (read/unread, starred)
  * - Email metadata (sender, subject, snippet, time)
  */
-export function EmailList({ emails = [] }: EmailListProps) {
+export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
+  // Transform EmailMessage to Email format
+  const transformEmail = (email: EmailWithThread): Email => {
+    const time = new Date(email.internalDate).toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+
+    return {
+      from: email.from ?? 'Unknown Sender',
+      subject: email.subject ?? 'No Subject',
+      snippet: email.snippet ?? '',
+      time,
+      unread: !email.thread.isRead,
+      starred: email.thread.isStarred,
+    };
+  };
+
   // Default sample emails if none provided
   const defaultEmails: Email[] = [
     {
@@ -43,7 +69,7 @@ export function EmailList({ emails = [] }: EmailListProps) {
     },
   ];
 
-  const emailList = emails.length > 0 ? emails : defaultEmails;
+  const emailList = emails.length > 0 ? emails.map(transformEmail) : defaultEmails;
 
   return (
     <div className="mr-3 flex-1 overflow-y-auto rounded-2xl bg-white">
@@ -85,7 +111,9 @@ export function EmailList({ emails = [] }: EmailListProps) {
             </svg>
           </Button>
         </div>
-        <div className="mr-4 ml-auto text-sm text-gray-600">1-50 of 8,066</div>
+        <div className="mr-4 ml-auto text-sm text-gray-600">
+          {emailList.length > 0 ? `1-${emailList.length} of ${emailList.length}` : 'No emails'}
+        </div>
         <div className="flex items-center space-x-2">
           <Button variant="ghost" size="icon" className="h-8 w-8">
             <svg
