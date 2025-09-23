@@ -96,8 +96,8 @@ export class GmailServiceImpl implements GmailService {
       },
     });
 
-    if (!account?.access_token || !account?.refresh_token) {
-      throw new Error(`No Google tokens found for user ${userId}`);
+    if (!account?.access_token) {
+      throw new Error(`No Google access token found for user ${userId}. Please re-authenticate.`);
     }
 
     const oauth2Client = new google.auth.OAuth2(
@@ -108,7 +108,25 @@ export class GmailServiceImpl implements GmailService {
 
     oauth2Client.setCredentials({
       access_token: account.access_token,
-      refresh_token: account.refresh_token,
+      refresh_token: account.refresh_token ?? undefined,
+    });
+
+    // Persist refreshed tokens when googleapis auto-refreshes
+    oauth2Client.on("tokens", (tokens) => {
+      this.db.account.update({
+        where: { 
+          provider_providerAccountId: { 
+            provider: "google", 
+            providerAccountId: account.providerAccountId 
+          } 
+        },
+        data: {
+          access_token: tokens.access_token ?? account.access_token,
+          expires_at: tokens.expiry_date ? Math.floor(tokens.expiry_date / 1000) : account.expires_at,
+          refresh_token: tokens.refresh_token ?? account.refresh_token,
+          scope: tokens.scope ?? account.scope,
+        },
+      }).catch(console.error);
     });
 
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
