@@ -1,6 +1,7 @@
-import { Button } from "~/components/ui/button";
-import type { Email } from "~/types/components";
 import type { EmailMessage } from "@prisma/client";
+import type { Email } from "~/types/components";
+
+import { Button } from "~/components/ui/button";
 
 import { EmailTabs } from "./EmailTabs";
 
@@ -22,16 +23,38 @@ type EmailWithThread = EmailMessage & {
 export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
   // Transform EmailMessage to Email format
   const transformEmail = (email: EmailWithThread): Email => {
-    const time = new Date(email.internalDate).toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
+    const time = new Date(email.internalDate).toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
       hour12: true,
     });
 
+    // Extract sender name from email address
+    const extractSenderName = (from: string | null): string => {
+      if (!from) return "Unknown Sender";
+
+      // If it's in format "Name <email@domain.com>", extract the name
+      const nameRegex = /^(.+?)\s*<.+>$/;
+      const nameMatch = nameRegex.exec(from);
+      if (nameMatch) {
+        return (
+          nameMatch[1]?.trim().replace(/^["']|["']$/g, "") ?? "Unknown Sender"
+        ); // Strip quotes
+      }
+
+      // If it's just an email, extract the part before @
+      if (from.includes("@")) {
+        const username = from.split("@")[0];
+        return username?.replace(/^["']|["']$/g, "") ?? "Unknown Sender"; // Strip quotes
+      }
+
+      return from.replace(/^["']|["']$/g, ""); // Strip quotes from any other format
+    };
+
     return {
-      from: email.from ?? 'Unknown Sender',
-      subject: email.subject ?? 'No Subject',
-      snippet: email.snippet ?? '',
+      from: extractSenderName(email.from),
+      subject: email.subject ?? "No Subject",
+      snippet: email.snippet ?? "",
       time,
       unread: !email.thread.isRead,
       starred: email.thread.isStarred,
@@ -69,12 +92,13 @@ export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
     },
   ];
 
-  const emailList = emails.length > 0 ? emails.map(transformEmail) : defaultEmails;
+  const emailList =
+    emails.length > 0 ? emails.map(transformEmail) : defaultEmails;
 
   return (
-    <div className="mr-3 flex-1 overflow-y-auto rounded-2xl bg-white">
+    <div className="mr-3 flex-1 rounded-2xl bg-white">
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 sticky top-0 bg-white">
+      <div className="sticky top-0 z-10 flex items-center justify-between bg-white px-4 py-2">
         <div className="flex items-center gap-3">
           <input
             type="checkbox"
@@ -112,7 +136,9 @@ export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
           </Button>
         </div>
         <div className="mr-4 ml-auto text-sm text-gray-600">
-          {emailList.length > 0 ? `1-${emailList.length} of ${emailList.length}` : 'No emails'}
+          {emailList.length > 0
+            ? `1-${emailList.length} of ${emailList.length}`
+            : "No emails"}
         </div>
         <div className="flex items-center space-x-2">
           <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -152,11 +178,11 @@ export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
       <EmailTabs />
 
       {/* Email List */}
-      <div className="mr-3 h-full divide-y divide-gray-200 rounded border-t border-r border-neutral-200">
+      <div className="flex-1 divide-y divide-gray-200 overflow-y-auto border-t border-neutral-200">
         {emailList.map((email, index) => (
           <div
             key={index}
-            className={`flex h-[40px] cursor-pointer items-center px-4 py-3 hover:bg-gray-50 border-b border-neutral-200 ${
+            className={`flex h-[40px] cursor-pointer items-center border-b border-neutral-200 px-4 py-3 hover:bg-gray-50 ${
               email.unread ? "bg-blue-50" : ""
             }`}
           >
@@ -188,26 +214,30 @@ export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
             </div>
 
             {/* Sender */}
-            <div className="mr-4 w-48 flex-shrink-0">
+            <div className="mr-4 w-48 min-w-0 flex-shrink-0">
               <span
-                className={`text-sm ${email.unread ? "font-semibold text-gray-900" : "text-gray-700"}`}
+                className={`block truncate text-sm ${email.unread ? "font-semibold text-gray-900" : "text-gray-700"}`}
               >
                 {email.from}
               </span>
             </div>
 
             {/* Subject and Snippet */}
-            <div className="mr-4 min-w-0 flex-1">
-              <div className="flex items-center space-x-2">
-                <span
-                  className={`text-sm ${email.unread ? "font-semibold text-gray-900" : "text-gray-700"}`}
-                >
-                  {email.subject}
-                </span>
-                <span className="truncate text-sm text-gray-500">
-                  - {email.snippet}
-                </span>
-              </div>
+            <div className="mr-4 flex min-w-0 flex-1 items-center">
+              {/* subject: do NOT let it shrink */}
+              <span
+                className={`text-sm ${email.unread ? "font-semibold text-gray-900" : "text-gray-700"} flex-shrink-0 truncate whitespace-nowrap overflow-hidden text-ellipsis`}
+              >
+                {email.subject}
+              </span>
+
+              {/* separator */}
+              <span className="flex-shrink-0 px-1 text-gray-400">–</span>
+
+              {/* snippet: takes remaining space and truncates */}
+              <span className="min-w-0 flex-1 truncate text-sm text-gray-500">
+                {email.snippet}
+              </span>
             </div>
 
             {/* Time */}

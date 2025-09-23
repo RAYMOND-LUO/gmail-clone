@@ -20,7 +20,7 @@ export async function InboxLayout({ userName, userImage }: InboxLayoutProps) {
     <div className="flex h-screen bg-gray-50">
       <Sidebar />
 
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col min-w-0">
         <Header userName={userName} userImage={userImage} />
         <EmailList emails={emails} />
       </div>
