@@ -118,10 +118,9 @@ model EmailMessage {
   subject        String?
   snippet        String?  @db.Text
   // storage
-  // rawS3Key       String? // s3 key to raw RFC822 if you store it
-  // htmlS3Key      String? // s3 key to sanitized HTML body
-  // textPlain      String?  @db.Text // optional: quick search/snippet
-  // mimeType       String? // top-level mime type (e.g. multipart/alternative)
+  rawS3Key       String? // s3 key to raw RFC822 if you store it
+  htmlS3Key      String? // s3 key to sanitized HTML body
+  textPlain      String?  @db.Text // optional: quick search/snippet
 
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   thread      EmailThread  @relation(fields: [threadId], references: [id], onDelete: Cascade)
