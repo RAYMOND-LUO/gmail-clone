@@ -7,12 +7,8 @@ import { Button } from "~/components/ui/button";
  * - Email category tabs (Primary, Promotions, Social, Updates)
  * - Active tab highlighting
  * - Tab switching functionality
- *
- * Benefits:
- * - Reusable across different email views
- * - Centralized tab logic
- * - Easy to extend with new categories
  */
+
 export function EmailTabs() {
   return (
     <div className="h-[56px] bg-white">

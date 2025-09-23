@@ -22,11 +22,6 @@ interface EmailListProps {
  * - Displaying list of emails in Gmail table format
  * - Email interaction states (read/unread, starred)
  * - Email metadata (sender, subject, snippet, time)
- *
- * Benefits:
- * - Reusable across different views
- * - Centralized email display logic
- * - Easy to extend with new email features
  */
 export function EmailList({ emails = [] }: EmailListProps) {
   // Default sample emails if none provided

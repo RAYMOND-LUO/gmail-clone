@@ -1,21 +1,10 @@
-import Link from "next/link";
+"use client";
+
 import Image from "next/image";
+import { signOut } from "next-auth/react";
 
 import { Button } from "~/components/ui/button";
 
-/**
- * Sidebar Component
- * 
- * This component handles:
- * - Compose button
- * - Navigation menu items (Inbox, Starred, Snoozed, etc.)
- * - User sign out functionality
- * 
- * Benefits:
- * - Reusable across different layouts
- * - Centralized navigation logic
- * - Easy to extend with new menu items
- */
 export function Sidebar() {
   return (
     <div className="w-[256px] flex flex-shrink-0 bg-[#f8fafe]">
@@ -82,12 +71,13 @@ export function Sidebar() {
 
         {/* Sign out link */}
         <div className="flex w-full mt-8 pt-4 border-t border-gray-200">
-          <Link
-            href="/api/auth/signout"
-            className="text-md mx-auto text-gray-600 hover:text-gray-800"
+          <Button
+            onClick={() => signOut({ callbackUrl: "/" })}
+            variant="ghost"
+            className="text-md mx-auto bg-white text-gray-600 hover:text-gray-800"
           >
             Sign out
-          </Link>
+          </Button>
         </div>
       </div>
     </div>
