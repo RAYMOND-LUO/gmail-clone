@@ -61,44 +61,13 @@ export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
     };
   };
 
-  // Default sample emails if none provided
-  const defaultEmails: Email[] = [
-    {
-      from: "Symbiotic HQ",
-      subject: "HYPERSONIC FESTIVAL: 200 3RD RELEASE TICKETS LEFT!",
-      snippet:
-        "Don't miss out on the biggest festival of the year! Only 200 tickets remaining for the third release...",
-      time: "4:22 PM",
-      unread: true,
-      starred: false,
-    },
-    {
-      from: "UNSW Sydney",
-      subject: "Important: Course Registration Deadline",
-      snippet:
-        "This is a reminder that course registration closes on Friday. Please ensure you have selected all your subjects...",
-      time: "3:15 PM",
-      unread: false,
-      starred: true,
-    },
-    {
-      from: "GitHub",
-      subject: "Your daily digest",
-      snippet:
-        "Here's what happened in your repositories today. 3 new commits, 2 pull requests merged...",
-      time: "2:30 PM",
-      unread: false,
-      starred: false,
-    },
-  ];
-
   const emailList =
-    emails.length > 0 ? emails.map(transformEmail) : defaultEmails;
+    emails.length > 0 ? emails.map(transformEmail) : [];
 
   return (
-    <div className="mr-3 flex-1 rounded-2xl bg-white">
+    <div className="flex-1 rounded-2xl bg-white">
       {/* Toolbar */}
-      <div className="sticky top-0 z-10 flex items-center justify-between bg-white px-4 py-2">
+      <div className="sticky rounded-2xl top-0 z-10 flex items-center justify-between bg-white px-4 py-2">
         <div className="flex items-center gap-3">
           <input
             type="checkbox"
@@ -178,7 +147,7 @@ export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
       <EmailTabs />
 
       {/* Email List */}
-      <div className="flex-1 divide-y divide-gray-200 overflow-y-auto border-t border-neutral-200">
+      <div className="flex-1 divide-y divide-gray-200 border-t border-neutral-200">
         {emailList.map((email, index) => (
           <div
             key={index}

@@ -18,10 +18,19 @@ export async function InboxLayout({ userName, userImage }: InboxLayoutProps) {
 
   return (
     <div className="flex h-screen bg-gray-50">
-      <Sidebar />
-
-      <div className="flex flex-1 flex-col min-w-0">
-        <Header userName={userName} userImage={userImage} />
+      {/* Sidebar */}
+      <aside className="w-64 flex-shrink-0 sticky top-0 self-start h-screen">
+        <Sidebar />
+      </aside>
+  
+      {/* Main column becomes the scroller */}
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-y-auto">
+        {/* Header sticks to top of this scroll container */}
+        <div className="sticky top-0 z-20 bg-gray-50">
+          <Header userName={userName} userImage={userImage} />
+        </div>
+  
+        {/* Content scrolls under the sticky header */}
         <EmailList emails={emails} />
       </div>
     </div>
