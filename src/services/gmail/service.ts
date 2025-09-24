@@ -456,7 +456,7 @@ export class GmailServiceImpl implements GmailService {
         select: { email: true },
       });
 
-      const gmailAddress = (account?.email as string) ?? 'unknown@gmail.com';
+      const gmailAddress = account?.email ?? 'unknown@gmail.com';
 
       // Update sync state in a separate transaction
       await this.db.$transaction(async (tx) => {
@@ -598,7 +598,7 @@ export class GmailServiceImpl implements GmailService {
         select: { email: true },
       });
 
-      const gmailAddress = (account?.email as string) ?? 'unknown@gmail.com';
+      const gmailAddress = account?.email ?? 'unknown@gmail.com';
 
       // Update delta sync timestamp
       await this.db.$transaction(async (tx) => {
@@ -775,7 +775,7 @@ export class GmailServiceImpl implements GmailService {
         select: { email: true },
       });
 
-      const gmailAddress = (account?.email as string) ?? 'unknown@gmail.com';
+      const gmailAddress = account?.email ?? 'unknown@gmail.com';
 
       // Update sync state with the new historyId
       await this.db.$transaction(async (tx) => {
