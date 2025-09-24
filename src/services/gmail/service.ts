@@ -323,79 +323,85 @@ export class GmailServiceImpl implements GmailService {
         
         const messages = await this.fetchMessagesBatch(gmail, messageIds);
         
-        for (const message of messages) {
-          try {
-            const headers = this.parseEmailHeaders(message.payload.headers);
-            const body = this.extractEmailBody(message.payload);
-            
-            let thread = await this.db.emailThread.findFirst({
-              where: {
-                userId,
-                gmailThreadId: message.threadId,
-              },
-            });
-
-            thread ??= await this.db.emailThread.create({
-              data: {
-                userId,
-                gmailThreadId: message.threadId,
-                subject: headers.subject,
-                lastMessageAt: new Date(parseInt(message.internalDate)),
-                snippet: message.snippet,
-              },
-            });
-
-            await this.db.emailMessage.upsert({
-              where: {
-                userId_gmailMessageId: {
+        // Process messages in a transaction for data consistency
+        await this.db.$transaction(async (tx) => {
+          for (const message of messages) {
+            try {
+              const headers = this.parseEmailHeaders(message.payload.headers);
+              const body = this.extractEmailBody(message.payload);
+              
+              let thread = await tx.emailThread.findFirst({
+                where: {
                   userId,
-                  gmailMessageId: message.id,
+                  gmailThreadId: message.threadId,
                 },
-              },
-              create: {
-                userId,
-                threadId: thread.id,
-                gmailMessageId: message.id,
-                internalDate: new Date(parseInt(message.internalDate)),
-                from: headers.from,
-                to: headers.to,
-                cc: headers.cc,
-                bcc: headers.bcc,
-                subject: headers.subject,
-                snippet: message.snippet,
-                textPlain: body.text,
-              },
-              update: {
-                snippet: message.snippet,
-              },
-            });
+              });
 
-            totalSynced++;
-          } catch (error) {
-            console.error(`Error syncing message ${message.id}:`, error);
-            totalErrors++;
+              thread ??= await tx.emailThread.create({
+                data: {
+                  userId,
+                  gmailThreadId: message.threadId,
+                  subject: headers.subject,
+                  lastMessageAt: new Date(parseInt(message.internalDate)),
+                  snippet: message.snippet,
+                },
+              });
+
+              await tx.emailMessage.upsert({
+                where: {
+                  userId_gmailMessageId: {
+                    userId,
+                    gmailMessageId: message.id,
+                  },
+                },
+                create: {
+                  userId,
+                  threadId: thread.id,
+                  gmailMessageId: message.id,
+                  internalDate: new Date(parseInt(message.internalDate)),
+                  from: headers.from,
+                  to: headers.to,
+                  cc: headers.cc,
+                  bcc: headers.bcc,
+                  subject: headers.subject,
+                  snippet: message.snippet,
+                  textPlain: body.text,
+                },
+                update: {
+                  snippet: message.snippet,
+                },
+              });
+
+              totalSynced++;
+            } catch (error) {
+              console.error(`Error syncing message ${message.id}:`, error);
+              totalErrors++;
+            }
           }
-        }
+        });
         
       } while (nextPageToken && pageCount < maxPages);
 
-      await this.db.gmailSyncState.upsert({
-        where: {
-          userId_provider_email: {
+      // Update sync state in a separate transaction
+      await this.db.$transaction(async (tx) => {
+        await tx.gmailSyncState.upsert({
+          where: {
+            userId_provider_email: {
+              userId,
+              provider: 'google',
+              email: 'user@gmail.com', // TODO: Get actual email from user
+            },
+          },
+          create: {
             userId,
             provider: 'google',
-            email: 'user@gmail.com', // TODO: Get actual email from user
+            email: 'user@gmail.com',
+            lastFullSync: new Date(),
           },
-        },
-        create: {
-          userId,
-          provider: 'google',
-          email: 'user@gmail.com',
-          lastFullSync: new Date(),
-        },
-        update: {
-          lastFullSync: new Date(),
-        },
+          update: {
+            lastFullSync: new Date(),
+          },
+        });
       });
 
       console.log(`Sync completed: ${totalSynced} synced, ${totalErrors} errors, ${pageCount} pages`);
