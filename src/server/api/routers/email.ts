@@ -19,4 +19,17 @@ export const emailRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       return ctx.gmailService.getEmailById(input.id);
     }),
+
+  syncUserEmails: protectedProcedure.mutation(async ({ ctx }) => {
+    // Sync emails from Gmail API to database
+    const syncResult = await ctx.gmailService.syncUserEmails(ctx.session.user.id);
+
+    // After syncing, return the updated list of emails
+    const emails = await ctx.gmailService.getUserEmails(ctx.session.user.id);
+
+    return {
+      syncResult,
+      emails,
+    };
+  }),
 });

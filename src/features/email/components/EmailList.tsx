@@ -1,7 +1,12 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import type { EmailMessage } from "@prisma/client";
 import type { Email } from "~/types/components";
 
 import { Button } from "~/components/ui/button";
+import { useTRPC } from "~/trpc/react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { EmailTabs } from "./EmailTabs";
 
@@ -21,6 +26,39 @@ type EmailWithThread = EmailMessage & {
  * - Email metadata (sender, subject, snippet, time)
  */
 export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
+  const [localEmails, setLocalEmails] = useState<EmailWithThread[]>(emails);
+  const trpc = useTRPC();
+  const queryClient = useQueryClient();
+
+  // Update local emails when props change
+  useEffect(() => {
+    setLocalEmails(emails);
+  }, [emails]);
+
+  // Use tRPC mutation for syncing emails
+  const syncEmailsMutation = useMutation(
+    trpc.email.syncUserEmails.mutationOptions({
+      onSuccess: (data) => {
+        // Update local state with the new emails
+        if (data.emails) {
+          setLocalEmails(data.emails);
+        }
+        // Invalidate the email queries to refresh data elsewhere
+        void queryClient.invalidateQueries({
+          queryKey: trpc.email.getByUser.queryKey(),
+        });
+      },
+      onError: (error) => {
+        console.error('Failed to sync emails:', error);
+      }
+    })
+  );
+
+  // Manual refresh function
+  const refreshEmails = async () => {
+    await syncEmailsMutation.mutateAsync();
+  };
+
   // Transform EmailMessage to Email format
   const transformEmail = (email: EmailWithThread): Email => {
     const time = new Date(email.internalDate).toLocaleTimeString("en-US", {
@@ -62,7 +100,7 @@ export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
   };
 
   const emailList =
-    emails.length > 0 ? emails.map(transformEmail) : [];
+    localEmails.length > 0 ? localEmails.map(transformEmail) : [];
 
   return (
     <div className="flex-1 rounded-2xl bg-white">
@@ -73,9 +111,15 @@ export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
             type="checkbox"
             className="mr-3 h-4 w-4 flex-shrink-0 rounded text-blue-600"
           />
-          <Button variant="ghost" size="icon" className="h-8 w-8">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={refreshEmails}
+            disabled={syncEmailsMutation.isPending}
+          >
             <svg
-              className="h-4 w-4"
+              className={`h-4 w-4 ${syncEmailsMutation.isPending ? 'animate-spin' : ''}`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -105,6 +149,7 @@ export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
           </Button>
         </div>
         <div className="mr-4 ml-auto text-sm text-gray-600">
+          {syncEmailsMutation.isPending && <span className="mr-2 text-blue-500">Syncing emails...</span>}
           {emailList.length > 0
             ? `1-${emailList.length} of ${emailList.length}`
             : "No emails"}
@@ -148,7 +193,15 @@ export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
 
       {/* Email List */}
       <div className="flex-1 divide-y divide-gray-200 border-t border-neutral-200">
-        {emailList.map((email, index) => (
+        {emailList.length === 0 ? (
+          <div className="flex h-32 items-center justify-center text-gray-500">
+            <div className="text-center">
+              <p className="text-lg font-medium">No emails found</p>
+              <p className="text-sm">Click the refresh button to sync your emails</p>
+            </div>
+          </div>
+        ) : (
+          emailList.map((email, index) => (
           <div
             key={index}
             className={`flex h-[40px] cursor-pointer items-center border-b border-neutral-200 px-4 py-3 hover:bg-gray-50 ${
@@ -214,7 +267,8 @@ export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
               <span className="text-xs text-gray-500">{email.time}</span>
             </div>
           </div>
-        ))}
+        ))
+        )}
       </div>
     </div>
   );

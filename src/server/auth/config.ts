@@ -63,5 +63,30 @@ export const authConfig = {
         id: user.id,
       },
     }),
+    signIn: async ({ user, account }) => {
+      // Trigger Gmail sync when user signs in with Google
+      if (account?.provider === "google" && user.id) {
+        try {
+          // Import Gmail service dynamically to avoid circular dependencies
+          const { getGmailService } = await import("~/services/gmail/service");
+          const { db } = await import("~/server/db");
+          
+          const gmailService = getGmailService(db);
+          
+          // Run sync in background (don't wait for it to complete)
+          gmailService.syncUserEmails(user.id, 3, 100) // 3 pages, 100 messages per page
+            .then((result) => {
+              console.log(`Background sync completed for user ${user.id}:`, result);
+            })
+            .catch((error) => {
+              console.error(`Background sync failed for user ${user.id}:`, error);
+            });
+        } catch (error) {
+          console.error("Failed to trigger Gmail sync on login:", error);
+        }
+      }
+      
+      return true; // Allow the sign-in to proceed
+    },
   },
 } satisfies NextAuthConfig;
