@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import type { EmailMessage } from "@prisma/client";
 import type { Email } from "~/types/components";
 
@@ -14,6 +15,7 @@ type EmailWithThread = EmailMessage & {
   thread: {
     isRead: boolean;
     isStarred: boolean;
+    isImportant: boolean;
   };
 };
 
@@ -59,6 +61,18 @@ export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
     await syncEmailsMutation.mutateAsync();
   };
 
+  // Toggle star status
+  const toggleStar = async (emailId: string, currentStarred: boolean) => {
+    // TODO: Implement star toggle API call
+    console.log(`Toggling star for email ${emailId} from ${currentStarred} to ${!currentStarred}`);
+  };
+
+  // Toggle important status
+  const toggleImportant = async (emailId: string, currentImportant: boolean) => {
+    // TODO: Implement important toggle API call
+    console.log(`Toggling important for email ${emailId} from ${currentImportant} to ${!currentImportant}`);
+  };
+
   // Transform EmailMessage to Email format
   const transformEmail = (email: EmailWithThread): Email => {
     const time = new Date(email.internalDate).toLocaleTimeString("en-US", {
@@ -96,6 +110,7 @@ export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
       time,
       unread: !email.thread.isRead,
       starred: email.thread.isStarred,
+      important: email.thread.isImportant,
     };
   };
 
@@ -204,9 +219,9 @@ export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
           emailList.map((email, index) => (
           <div
             key={index}
-            className={`flex h-[40px] cursor-pointer items-center border-b border-neutral-200 px-4 py-3 hover:bg-gray-50 ${
-              email.unread ? "bg-blue-50" : ""
-            }`}
+            className={`flex h-[40px] cursor-pointer items-center border-b border-neutral-200 px-4 py-3 transition-all duration-200 ${
+              email.unread ? "bg-white font-medium hover:bg-gray-100" : "bg-gray-50 hover:bg-gray-100"
+            } hover:shadow-sm`}
           >
             {/* Checkbox */}
             <div className="mr-3 flex-shrink-0">
@@ -217,8 +232,13 @@ export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
             </div>
 
             {/* Star */}
-            <div className="mr-3 flex-shrink-0">
-              <Button variant="ghost" size="icon" className="h-6 w-6">
+            <div className="mr-2 flex-shrink-0">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-6 w-6"
+                onClick={() => toggleStar(index.toString(), email.starred ?? false)}
+              >
                 <svg
                   className={`h-4 w-4 ${email.starred ? "fill-current text-yellow-400" : "text-gray-400"}`}
                   fill="none"
@@ -235,10 +255,28 @@ export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
               </Button>
             </div>
 
+            {/* Important */}
+            <div className="mr-3 flex-shrink-0">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-6 w-6"
+                onClick={() => toggleImportant(index.toString(), email.important ?? false)}
+              >
+                <Image 
+                  src="/important.png" 
+                  alt="Important" 
+                  width={16}
+                  height={16}
+                  className={`h-4 w-4 ${email.important ? "opacity-100" : "opacity-70"}`}
+                />
+              </Button>
+            </div>
+
             {/* Sender */}
             <div className="mr-4 w-48 min-w-0 flex-shrink-0">
               <span
-                className={`block truncate text-sm ${email.unread ? "font-semibold text-gray-900" : "text-gray-700"}`}
+                className={`block truncate text-sm ${email.unread ? "font-bold text-gray-900" : "text-gray-600"}`}
               >
                 {email.from}
               </span>
@@ -248,7 +286,7 @@ export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
             <div className="mr-4 flex min-w-0 flex-1 items-center">
               {/* subject: do NOT let it shrink */}
               <span
-                className={`text-sm ${email.unread ? "font-semibold text-gray-900" : "text-gray-700"} flex-shrink-0 truncate whitespace-nowrap overflow-hidden text-ellipsis`}
+                className={`text-sm ${email.unread ? "font-bold text-gray-900" : "text-gray-600"} flex-shrink-0 truncate whitespace-nowrap overflow-hidden text-ellipsis`}
               >
                 {email.subject}
               </span>
@@ -257,14 +295,14 @@ export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
               <span className="flex-shrink-0 px-1 text-gray-400">–</span>
 
               {/* snippet: takes remaining space and truncates */}
-              <span className="min-w-0 flex-1 truncate text-sm text-gray-500">
+              <span className={`min-w-0 flex-1 truncate text-sm ${email.unread ? "text-gray-700" : "text-gray-500"}`}>
                 {email.snippet}
               </span>
             </div>
 
             {/* Time */}
             <div className="flex-shrink-0 text-right">
-              <span className="text-xs text-gray-500">{email.time}</span>
+              <span className={`text-xs ${email.unread ? "font-semibold text-gray-700" : "text-gray-500"}`}>{email.time}</span>
             </div>
           </div>
         ))

@@ -17,6 +17,7 @@ export type Email = {
   time: string;
   unread: boolean;
   starred?: boolean;
+  important?: boolean;
 };
 
 export type EmailListProps = {

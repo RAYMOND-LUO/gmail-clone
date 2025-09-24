@@ -12,9 +12,9 @@ export interface GmailService {
   syncAllUsersEmails(): Promise<AllUsersSyncResult>;
   syncUserEmailsDelta(userId: string, maxMessages?: number): Promise<SyncResult>;
   syncUserEmailsByHistory(userId: string, startHistoryId: string): Promise<SyncResult>;
-  getAllEmails(): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean } })[]>;
-  getUserEmails(userId: string): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean } })[]>;
-  getEmailById(id: string): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean } }) | null>;
+  getAllEmails(): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean; isImportant: boolean } })[]>;
+  getUserEmails(userId: string): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean; isImportant: boolean } })[]>;
+  getEmailById(id: string): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean; isImportant: boolean } }) | null>;
 }
 
 export interface SyncResult {
@@ -76,6 +76,7 @@ export interface GmailMessage {
   id: string;
   threadId: string;
   internalDate: string;
+  labelIds?: string[];  // Added labelIds to check for UNREAD, STARRED, etc.
   payload: {
     headers: Array<{ name: string; value: string }>;
     body?: {
@@ -316,88 +317,135 @@ export class GmailServiceImpl implements GmailService {
     messagesPerPage = 100
   ): Promise<SyncResult> {
     console.log(`Starting email sync for user ${userId}`);
-    
+
     try {
       const { gmail } = await this.getGmailClient(userId);
       let totalSynced = 0;
       let totalErrors = 0;
       let pageCount = 0;
       let nextPageToken: string | undefined;
+      const allMessages: GmailMessage[] = [];
 
+      // Step 1: Fetch all messages from Gmail API (outside transaction)
       do {
         pageCount++;
         console.log(`Fetching page ${pageCount}/${maxPages}`);
-        
+
         const { messageIds, nextPageToken: newNextPageToken } = await this.fetchMessageIds(
           gmail,
           messagesPerPage,
           nextPageToken
         );
-        
+
         nextPageToken = newNextPageToken;
-        
+
         if (messageIds.length === 0) break;
-        
+
         const messages = await this.fetchMessagesBatch(gmail, messageIds);
-        
-        // Process messages in a transaction for data consistency
-        await this.db.$transaction(async (tx) => {
-          for (const message of messages) {
-            try {
-              const headers = this.parseEmailHeaders(message.payload.headers);
-              const body = this.extractEmailBody(message.payload);
-              
-              let thread = await tx.emailThread.findFirst({
-                where: {
-                  userId,
-                  gmailThreadId: message.threadId,
-                },
-              });
+        allMessages.push(...messages);
 
-              thread ??= await tx.emailThread.create({
-                data: {
-                  userId,
-                  gmailThreadId: message.threadId,
-                  subject: headers.subject,
-                  lastMessageAt: new Date(parseInt(message.internalDate)),
-                  snippet: message.snippet,
-                },
-              });
-
-              await tx.emailMessage.upsert({
-                where: {
-                  userId_gmailMessageId: {
-                    userId,
-                    gmailMessageId: message.id,
-                  },
-                },
-                create: {
-                  userId,
-                  threadId: thread.id,
-                  gmailMessageId: message.id,
-                  internalDate: new Date(parseInt(message.internalDate)),
-                  from: headers.from,
-                  to: headers.to,
-                  cc: headers.cc,
-                  bcc: headers.bcc,
-                  subject: headers.subject,
-                  snippet: message.snippet,
-                  textPlain: body.text,
-                },
-                update: {
-                  snippet: message.snippet,
-                },
-              });
-
-              totalSynced++;
-            } catch (error) {
-              console.error(`Error syncing message ${message.id}:`, error);
-              totalErrors++;
-            }
-          }
-        });
-        
       } while (nextPageToken && pageCount < maxPages);
+
+      console.log(`Fetched ${allMessages.length} messages from Gmail, now processing...`);
+
+      // Step 2: Process messages in smaller batches with separate transactions
+      const BATCH_SIZE = 10; // Process 10 messages per transaction to avoid timeout
+
+      for (let i = 0; i < allMessages.length; i += BATCH_SIZE) {
+        const messageBatch = allMessages.slice(i, Math.min(i + BATCH_SIZE, allMessages.length));
+
+        // Use a shorter transaction for each batch
+        await this.db.$transaction(
+          async (tx) => {
+            for (const message of messageBatch) {
+              try {
+                const headers = this.parseEmailHeaders(message.payload.headers);
+                const body = this.extractEmailBody(message.payload);
+
+                // Check if message is unread or starred based on Gmail labels
+                const isUnread = message.labelIds?.includes('UNREAD') ?? false;
+                const isStarred = message.labelIds?.includes('STARRED') ?? false;
+
+                let thread = await tx.emailThread.findFirst({
+                  where: {
+                    userId,
+                    gmailThreadId: message.threadId,
+                  },
+                });
+
+                if (thread) {
+                  // Update existing thread's read/starred status
+                  thread = await tx.emailThread.update({
+                    where: { id: thread.id },
+                    data: {
+                      isRead: !isUnread,  // If UNREAD label is present, isRead should be false
+                      isStarred: isStarred,
+                      lastMessageAt: new Date(parseInt(message.internalDate)),
+                      snippet: message.snippet,
+                    },
+                  });
+                } else {
+                  // Create new thread with read/starred status
+                  thread = await tx.emailThread.create({
+                    data: {
+                      userId,
+                      gmailThreadId: message.threadId,
+                      subject: headers.subject,
+                      lastMessageAt: new Date(parseInt(message.internalDate)),
+                      snippet: message.snippet,
+                      isRead: !isUnread,  // If UNREAD label is present, isRead should be false
+                      isStarred: isStarred,
+                    },
+                  });
+                }
+
+                await tx.emailMessage.upsert({
+                  where: {
+                    userId_gmailMessageId: {
+                      userId,
+                      gmailMessageId: message.id,
+                    },
+                  },
+                  create: {
+                    userId,
+                    threadId: thread.id,
+                    gmailMessageId: message.id,
+                    internalDate: new Date(parseInt(message.internalDate)),
+                    from: headers.from,
+                    to: headers.to,
+                    cc: headers.cc,
+                    bcc: headers.bcc,
+                    subject: headers.subject,
+                    snippet: message.snippet,
+                    textPlain: body.text,
+                  },
+                  update: {
+                    snippet: message.snippet,
+                    // Also update read/starred status on existing messages
+                    thread: {
+                      update: {
+                        isRead: !isUnread,
+                        isStarred: isStarred,
+                      }
+                    }
+                  },
+                });
+
+                totalSynced++;
+              } catch (error) {
+                console.error(`Error syncing message ${message.id}:`, error);
+                totalErrors++;
+              }
+            }
+          },
+          {
+            maxWait: 10000, // Maximum time to wait for a transaction slot (10 seconds)
+            timeout: 30000, // Maximum time for the transaction to complete (30 seconds)
+          }
+        );
+
+        console.log(`Processed batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(allMessages.length / BATCH_SIZE)}`);
+      }
 
       // Get the user's Gmail address from their Account
       const account = await this.db.account.findFirst({
@@ -470,7 +518,11 @@ export class GmailServiceImpl implements GmailService {
           try {
             const headers = this.parseEmailHeaders(message.payload.headers);
             const body = this.extractEmailBody(message.payload);
-            
+
+            // Check if message is unread or starred based on Gmail labels
+            const isUnread = message.labelIds?.includes('UNREAD') ?? false;
+            const isStarred = message.labelIds?.includes('STARRED') ?? false;
+
             let thread = await tx.emailThread.findFirst({
               where: {
                 userId,
@@ -478,15 +530,31 @@ export class GmailServiceImpl implements GmailService {
               },
             });
 
-            thread ??= await tx.emailThread.create({
-              data: {
-                userId,
-                gmailThreadId: message.threadId,
-                subject: headers.subject,
-                lastMessageAt: new Date(parseInt(message.internalDate)),
-                snippet: message.snippet,
-              },
-            });
+            if (thread) {
+              // Update existing thread's read/starred status
+              thread = await tx.emailThread.update({
+                where: { id: thread.id },
+                data: {
+                  isRead: !isUnread,
+                  isStarred: isStarred,
+                  lastMessageAt: new Date(parseInt(message.internalDate)),
+                  snippet: message.snippet,
+                },
+              });
+            } else {
+              // Create new thread with read/starred status
+              thread = await tx.emailThread.create({
+                data: {
+                  userId,
+                  gmailThreadId: message.threadId,
+                  subject: headers.subject,
+                  lastMessageAt: new Date(parseInt(message.internalDate)),
+                  snippet: message.snippet,
+                  isRead: !isUnread,
+                  isStarred: isStarred,
+                },
+              });
+            }
 
             await tx.emailMessage.upsert({
               where: {
@@ -627,7 +695,11 @@ export class GmailServiceImpl implements GmailService {
           try {
             const headers = this.parseEmailHeaders(message.payload.headers);
             const body = this.extractEmailBody(message.payload);
-            
+
+            // Check if message is unread or starred based on Gmail labels
+            const isUnread = message.labelIds?.includes('UNREAD') ?? false;
+            const isStarred = message.labelIds?.includes('STARRED') ?? false;
+
             let thread = await tx.emailThread.findFirst({
               where: {
                 userId,
@@ -635,15 +707,31 @@ export class GmailServiceImpl implements GmailService {
               },
             });
 
-            thread ??= await tx.emailThread.create({
-              data: {
-                userId,
-                gmailThreadId: message.threadId,
-                subject: headers.subject,
-                lastMessageAt: new Date(parseInt(message.internalDate)),
-                snippet: message.snippet,
-              },
-            });
+            if (thread) {
+              // Update existing thread's read/starred status
+              thread = await tx.emailThread.update({
+                where: { id: thread.id },
+                data: {
+                  isRead: !isUnread,
+                  isStarred: isStarred,
+                  lastMessageAt: new Date(parseInt(message.internalDate)),
+                  snippet: message.snippet,
+                },
+              });
+            } else {
+              // Create new thread with read/starred status
+              thread = await tx.emailThread.create({
+                data: {
+                  userId,
+                  gmailThreadId: message.threadId,
+                  subject: headers.subject,
+                  lastMessageAt: new Date(parseInt(message.internalDate)),
+                  snippet: message.snippet,
+                  isRead: !isUnread,
+                  isStarred: isStarred,
+                },
+              });
+            }
 
             await tx.emailMessage.upsert({
               where: {
@@ -765,13 +853,14 @@ export class GmailServiceImpl implements GmailService {
   /**
    * Get all emails from database
    */
-  async getAllEmails(): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean } })[]> {
+  async getAllEmails(): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean; isImportant: boolean } })[]> {
     return this.db.emailMessage.findMany({
       include: {
         thread: {
           select: {
             isRead: true,
             isStarred: true,
+            isImportant: true,
           },
         },
       },
@@ -784,7 +873,7 @@ export class GmailServiceImpl implements GmailService {
   /**
    * Get emails for a specific user
    */
-  async getUserEmails(userId: string): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean } })[]> {
+  async getUserEmails(userId: string): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean; isImportant: boolean } })[]> {
     return this.db.emailMessage.findMany({
       where: {
         userId,
@@ -794,6 +883,7 @@ export class GmailServiceImpl implements GmailService {
           select: {
             isRead: true,
             isStarred: true,
+            isImportant: true,
           },
         },
       },
@@ -806,7 +896,7 @@ export class GmailServiceImpl implements GmailService {
   /**
    * Get a specific email by ID
    */
-  async getEmailById(id: string): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean } }) | null> {
+  async getEmailById(id: string): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean; isImportant: boolean } }) | null> {
     return this.db.emailMessage.findUnique({
       where: {
         id,
@@ -816,6 +906,7 @@ export class GmailServiceImpl implements GmailService {
           select: {
             isRead: true,
             isStarred: true,
+            isImportant: true,
           },
         },
       },
