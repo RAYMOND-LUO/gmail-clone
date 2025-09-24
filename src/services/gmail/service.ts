@@ -10,6 +10,8 @@ import { google } from "googleapis";
 export interface GmailService {
   syncUserEmails(userId: string, maxPages?: number, messagesPerPage?: number): Promise<SyncResult>;
   syncAllUsersEmails(): Promise<AllUsersSyncResult>;
+  syncUserEmailsDelta(userId: string, maxMessages?: number): Promise<SyncResult>;
+  syncUserEmailsByHistory(userId: string, startHistoryId: string): Promise<SyncResult>;
   getAllEmails(): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean } })[]>;
   getUserEmails(userId: string): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean } })[]>;
   getEmailById(id: string): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean } }) | null>;
@@ -46,6 +48,21 @@ interface GmailClient {
       }>;
       get: (params: { userId: string; id: string; format: string }) => Promise<{
         data: GmailMessage;
+      }>;
+    };
+    history: {
+      list: (params: { userId: string; startHistoryId: string; historyTypes?: string[] }) => Promise<{
+        data: {
+          history?: Array<{
+            id: string;
+            messages?: Array<{ id: string }>;
+            messagesAdded?: Array<{ message: { id: string } }>;
+            messagesDeleted?: Array<{ message: { id: string } }>;
+            labelsAdded?: Array<{ message: { id: string } }>;
+            labelsRemoved?: Array<{ message: { id: string } }>;
+          }>;
+          nextPageToken?: string;
+        };
       }>;
     };
   };
@@ -382,6 +399,17 @@ export class GmailServiceImpl implements GmailService {
         
       } while (nextPageToken && pageCount < maxPages);
 
+      // Get the user's Gmail address from their Account
+      const account = await this.db.account.findFirst({
+        where: {
+          userId,
+          provider: 'google',
+        },
+        select: { email: true },
+      });
+
+      const gmailAddress = (account?.email as string) ?? 'unknown@gmail.com';
+
       // Update sync state in a separate transaction
       await this.db.$transaction(async (tx) => {
         await tx.gmailSyncState.upsert({
@@ -389,13 +417,13 @@ export class GmailServiceImpl implements GmailService {
             userId_provider_email: {
               userId,
               provider: 'google',
-              email: 'user@gmail.com', // TODO: Get actual email from user
+              email: gmailAddress,
             },
           },
           create: {
             userId,
             provider: 'google',
-            email: 'user@gmail.com',
+            email: gmailAddress,
             lastFullSync: new Date(),
           },
           update: {
@@ -408,6 +436,287 @@ export class GmailServiceImpl implements GmailService {
       return { synced: totalSynced, errors: totalErrors, totalPages: pageCount };
     } catch (error) {
       console.error(`Gmail sync failed for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delta sync for a specific user (for push notifications)
+   * Only syncs recent emails since last sync
+   */
+  async syncUserEmailsDelta(userId: string, maxMessages = 50): Promise<SyncResult> {
+    console.log(`Starting delta email sync for user ${userId}`);
+    
+    try {
+      const { gmail } = await this.getGmailClient(userId);
+      let totalSynced = 0;
+      let totalErrors = 0;
+
+      // Get recent messages (last 50 by default)
+      const { messageIds } = await this.fetchMessageIds(gmail, maxMessages);
+      
+      if (messageIds.length === 0) {
+        console.log(`No new messages for user ${userId}`);
+        return { synced: 0, errors: 0, totalPages: 0 };
+      }
+      
+      console.log(`Found ${messageIds.length} recent messages for delta sync`);
+      
+      const messages = await this.fetchMessagesBatch(gmail, messageIds);
+      
+      // Process messages in a transaction for data consistency
+      await this.db.$transaction(async (tx) => {
+        for (const message of messages) {
+          try {
+            const headers = this.parseEmailHeaders(message.payload.headers);
+            const body = this.extractEmailBody(message.payload);
+            
+            let thread = await tx.emailThread.findFirst({
+              where: {
+                userId,
+                gmailThreadId: message.threadId,
+              },
+            });
+
+            thread ??= await tx.emailThread.create({
+              data: {
+                userId,
+                gmailThreadId: message.threadId,
+                subject: headers.subject,
+                lastMessageAt: new Date(parseInt(message.internalDate)),
+                snippet: message.snippet,
+              },
+            });
+
+            await tx.emailMessage.upsert({
+              where: {
+                userId_gmailMessageId: {
+                  userId,
+                  gmailMessageId: message.id,
+                },
+              },
+              create: {
+                userId,
+                threadId: thread.id,
+                gmailMessageId: message.id,
+                internalDate: new Date(parseInt(message.internalDate)),
+                from: headers.from,
+                to: headers.to,
+                cc: headers.cc,
+                bcc: headers.bcc,
+                subject: headers.subject,
+                snippet: message.snippet,
+                textPlain: body.text,
+              },
+              update: {
+                snippet: message.snippet,
+              },
+            });
+
+            totalSynced++;
+          } catch (error) {
+            console.error(`Error syncing message ${message.id}:`, error);
+            totalErrors++;
+          }
+        }
+      });
+
+      // Get the user's Gmail address from their Account
+      const account = await this.db.account.findFirst({
+        where: {
+          userId,
+          provider: 'google',
+        },
+        select: { email: true },
+      });
+
+      const gmailAddress = (account?.email as string) ?? 'unknown@gmail.com';
+
+      // Update delta sync timestamp
+      await this.db.$transaction(async (tx) => {
+        await tx.gmailSyncState.upsert({
+          where: {
+            userId_provider_email: {
+              userId,
+              provider: 'google',
+              email: gmailAddress,
+            },
+          },
+          create: {
+            userId,
+            provider: 'google',
+            email: gmailAddress,
+            lastDeltaSync: new Date(),
+          },
+          update: {
+            lastDeltaSync: new Date(),
+          },
+        });
+      });
+
+      console.log(`Delta sync completed: ${totalSynced} synced, ${totalErrors} errors`);
+      return { synced: totalSynced, errors: totalErrors, totalPages: 1 };
+    } catch (error) {
+      console.error(`Gmail delta sync failed for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Sync emails using Gmail history API (true delta sync)
+   * This is the proper way to handle push notifications
+   */
+  async syncUserEmailsByHistory(userId: string, startHistoryId: string): Promise<SyncResult> {
+    console.log(`Starting history-based sync for user ${userId} from historyId: ${startHistoryId}`);
+    
+    try {
+      const { gmail } = await this.getGmailClient(userId);
+      let totalSynced = 0;
+      let totalErrors = 0;
+
+      // Get history changes since the last known historyId
+      const historyResponse = await this.retryWithBackoff(async () => {
+        return await gmail.users.history.list({
+          userId: 'me',
+          startHistoryId,
+          historyTypes: ['messageAdded'], // Only get new messages, not label changes
+        });
+      });
+
+      const history = historyResponse.data.history ?? [];
+      console.log(`Found ${history.length} history records since ${startHistoryId}`);
+
+      if (history.length === 0) {
+        console.log(`No new messages since historyId: ${startHistoryId}`);
+        return { synced: 0, errors: 0, totalPages: 0 };
+      }
+
+      // Extract all message IDs from history
+      const messageIds: string[] = [];
+      for (const historyRecord of history) {
+        if (historyRecord.messagesAdded) {
+          for (const messageAdded of historyRecord.messagesAdded) {
+            if (messageAdded.message?.id) {
+              messageIds.push(messageAdded.message.id);
+            }
+          }
+        }
+        // Also check for messages in the main messages array
+        if (historyRecord.messages) {
+          for (const message of historyRecord.messages) {
+            if (message.id && !messageIds.includes(message.id)) {
+              messageIds.push(message.id);
+            }
+          }
+        }
+      }
+
+      if (messageIds.length === 0) {
+        console.log(`No new message IDs found in history`);
+        return { synced: 0, errors: 0, totalPages: 0 };
+      }
+
+      console.log(`Found ${messageIds.length} new messages to sync`);
+      
+      // Fetch and process the new messages
+      const messages = await this.fetchMessagesBatch(gmail, messageIds);
+      
+      // Process messages in a transaction for data consistency
+      await this.db.$transaction(async (tx) => {
+        for (const message of messages) {
+          try {
+            const headers = this.parseEmailHeaders(message.payload.headers);
+            const body = this.extractEmailBody(message.payload);
+            
+            let thread = await tx.emailThread.findFirst({
+              where: {
+                userId,
+                gmailThreadId: message.threadId,
+              },
+            });
+
+            thread ??= await tx.emailThread.create({
+              data: {
+                userId,
+                gmailThreadId: message.threadId,
+                subject: headers.subject,
+                lastMessageAt: new Date(parseInt(message.internalDate)),
+                snippet: message.snippet,
+              },
+            });
+
+            await tx.emailMessage.upsert({
+              where: {
+                userId_gmailMessageId: {
+                  userId,
+                  gmailMessageId: message.id,
+                },
+              },
+              create: {
+                userId,
+                threadId: thread.id,
+                gmailMessageId: message.id,
+                internalDate: new Date(parseInt(message.internalDate)),
+                from: headers.from,
+                to: headers.to,
+                cc: headers.cc,
+                bcc: headers.bcc,
+                subject: headers.subject,
+                snippet: message.snippet,
+                textPlain: body.text,
+              },
+              update: {
+                snippet: message.snippet,
+              },
+            });
+
+            totalSynced++;
+          } catch (error) {
+            console.error(`Error syncing message ${message.id}:`, error);
+            totalErrors++;
+          }
+        }
+      });
+
+      // Get the user's Gmail address from their Account
+      const account = await this.db.account.findFirst({
+        where: {
+          userId,
+          provider: 'google',
+        },
+        select: { email: true },
+      });
+
+      const gmailAddress = (account?.email as string) ?? 'unknown@gmail.com';
+
+      // Update sync state with the new historyId
+      await this.db.$transaction(async (tx) => {
+        await tx.gmailSyncState.upsert({
+          where: {
+            userId_provider_email: {
+              userId,
+              provider: 'google',
+              email: gmailAddress,
+            },
+          },
+          create: {
+            userId,
+            provider: 'google',
+            email: gmailAddress,
+            historyId: startHistoryId, // Store the latest historyId
+            lastDeltaSync: new Date(),
+          },
+          update: {
+            historyId: startHistoryId, // Update with the latest historyId
+            lastDeltaSync: new Date(),
+          },
+        });
+      });
+
+      console.log(`History sync completed: ${totalSynced} synced, ${totalErrors} errors`);
+      return { synced: totalSynced, errors: totalErrors, totalPages: 1 };
+    } catch (error) {
+      console.error(`Gmail history sync failed for user ${userId}:`, error);
       throw error;
     }
   }
