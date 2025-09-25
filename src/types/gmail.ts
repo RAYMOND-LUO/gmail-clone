@@ -13,9 +13,9 @@ export interface GmailService {
   syncUserEmailsDelta(userId: string, maxMessages?: number): Promise<SyncResult>;
   syncUserEmailsByHistory(userId: string, startHistoryId: string): Promise<SyncResult>;
   getAllEmails(): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean; isImportant: boolean } })[]>;
-  getUserEmails(userId: string): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean; isImportant: boolean } })[]>;
   getUserEmailsPaginated(userId: string, page: number, limit: number): Promise<PaginatedEmailResult>;
   getEmailById(id: string): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean; isImportant: boolean } }) | null>;
+  getEmailByIdWithHtml(userId: string, emailId: string): Promise<EmailWithHtml | null>;
   getInboxTotalCount(userId: string): Promise<number>;
 }
 
@@ -46,6 +46,12 @@ export interface PaginatedEmailResult {
   page: number;
   limit: number;
   totalPages: number;
+}
+
+export interface EmailWithHtml {
+  email: EmailMessage & { thread: { isRead: boolean; isStarred: boolean; isImportant: boolean } };
+  html: string;
+  textContent: string;
 }
 
 export interface GmailApiError extends Error {
@@ -108,6 +114,7 @@ export interface GmailMessage {
   threadId: string;
   internalDate: string;
   labelIds?: string[];  // Added labelIds to check for UNREAD, STARRED, etc.
+  raw?: string; // For raw format messages
   payload: {
     headers: Array<{ name: string; value: string }>;
     body?: {

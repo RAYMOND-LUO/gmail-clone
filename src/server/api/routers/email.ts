@@ -10,9 +10,6 @@ export const emailRouter = createTRPCRouter({
     return ctx.gmailService.getAllEmails();
   }),
 
-  getByUser: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.gmailService.getUserEmails(ctx.session.user.id);
-  }),
 
   getByUserPaginated: protectedProcedure
     .input(z.object({
@@ -29,6 +26,12 @@ export const emailRouter = createTRPCRouter({
       return ctx.gmailService.getEmailById(input.id);
     }),
 
+  getEmailByIdWithHtml: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.gmailService.getEmailByIdWithHtml(ctx.session.user.id, input.id);
+    }),
+
   syncUserEmails: protectedProcedure.mutation(async ({ ctx }) => {
     // Use paginated sync to fetch first page immediately, rest in background
     const syncResult = await ctx.gmailService.syncUserEmailsWithPagination(
@@ -37,29 +40,18 @@ export const emailRouter = createTRPCRouter({
       true // Continue in background
     );
 
-    // After syncing first page, return the updated list of emails
-    const emails = await ctx.gmailService.getUserEmails(ctx.session.user.id);
+    // After syncing first page, return the updated paginated emails
+    const emails = await ctx.gmailService.getUserEmailsPaginated(ctx.session.user.id, 1, 50);
 
     return {
       syncResult,
       emails,
       paginationInfo: {
         totalInbox: syncResult.totalInbox,
-        currentCount: emails.length,
+        currentCount: emails.emails.length,
         pageSize: syncResult.pageSize,
         backgroundSyncActive: syncResult.backgroundTaskStarted,
       },
-    };
-  }),
-
-  // Legacy sync endpoint for backward compatibility
-  syncUserEmailsFull: protectedProcedure.mutation(async ({ ctx }) => {
-    // Full sync - for when user wants to force sync everything
-    const syncResult = await ctx.gmailService.syncUserEmails(ctx.session.user.id, 20, 100);
-    const emails = await ctx.gmailService.getUserEmails(ctx.session.user.id);
-    return {
-      syncResult,
-      emails,
     };
   }),
 

@@ -1,16 +1,18 @@
 import type { PrismaClient, EmailMessage } from "@prisma/client";
 import { google } from "googleapis";
-import type { 
-  GmailService, 
-  SyncResult, 
-  PaginatedSyncResult, 
-  AllUsersSyncResult, 
-  PaginatedEmailResult, 
+import type {
+  GmailService,
+  SyncResult,
+  PaginatedSyncResult,
+  AllUsersSyncResult,
+  PaginatedEmailResult,
   GmailApiError,
   GmailClient,
   OAuth2Client,
   GmailMessage
 } from "~/types/gmail";
+import { getS3Service } from '~/services/s3/service';
+import * as mailparser from 'mailparser';
 
 
 /**
@@ -20,7 +22,11 @@ import type {
  * Uses googleapis library for token refresh and rate limiting
  */
 export class GmailServiceImpl implements GmailService {
-  constructor(private readonly db: PrismaClient) {}
+  private s3Service: ReturnType<typeof getS3Service>;
+
+  constructor(private readonly db: PrismaClient) {
+    this.s3Service = getS3Service();
+  }
 
   /**
    * Get authenticated Gmail client for user
@@ -177,7 +183,39 @@ export class GmailServiceImpl implements GmailService {
   }
 
   /**
-   * Extract email body content from Gmail message
+   * Extract email body content from raw Gmail message using nodemailer
+   */
+  private async extractEmailBodyFromRaw(gmail: GmailClient, messageId: string): Promise<{ html?: string; text?: string }> {
+    try {
+      // Get raw email from Gmail
+      const rawResponse = await this.retryWithBackoff(async () => {
+        return await gmail.users.messages.get({
+          userId: 'me',
+          id: messageId,
+          format: 'raw',
+        });
+      });
+
+      if (!rawResponse.data.raw) {
+        return { html: '', text: '' };
+      }
+
+      // Parse raw email using mailparser
+      const rawEmail = Buffer.from(rawResponse.data.raw, 'base64url').toString();
+      const parsed = await mailparser.simpleParser(rawEmail);
+
+      return {
+        html: typeof parsed.html === 'string' ? parsed.html : '',
+        text: typeof parsed.text === 'string' ? parsed.text : '',
+      };
+    } catch (error) {
+      console.error(`Failed to extract email body for message ${messageId}:`, error);
+      return { html: '', text: '' };
+    }
+  }
+
+  /**
+   * Extract email body content from Gmail message (legacy method for non-raw format)
    */
   private extractEmailBody(payload: GmailMessage['payload']): { html?: string; text?: string } {
     let html = '';
@@ -222,6 +260,21 @@ export class GmailServiceImpl implements GmailService {
     }
 
     return { html, text };
+  }
+
+  /**
+   * Store email HTML content in S3
+   */
+  private async storeEmailHtmlInS3(messageId: string, html: string): Promise<void> {
+    if (html) {
+      try {
+        await this.s3Service.storeEmailHtml(messageId, html);
+        console.log(`Stored HTML for message ${messageId} in S3`);
+      } catch (error) {
+        console.error(`Failed to store HTML for message ${messageId} in S3:`, error);
+        // Don't throw - continue with sync even if S3 storage fails
+      }
+    }
   }
 
   /**
@@ -277,6 +330,11 @@ export class GmailServiceImpl implements GmailService {
               try {
                 const headers = this.parseEmailHeaders(message.payload.headers);
                 const body = this.extractEmailBody(message.payload);
+
+                // Store HTML content in S3
+                if (body.html) {
+                  await this.storeEmailHtmlInS3(message.id, body.html);
+                }
 
                 // Check if message is unread or starred based on Gmail labels
                 const isUnread = message.labelIds?.includes('UNREAD') ?? false;
@@ -434,6 +492,11 @@ export class GmailServiceImpl implements GmailService {
           try {
             const headers = this.parseEmailHeaders(message.payload.headers);
             const body = this.extractEmailBody(message.payload);
+
+            // Store HTML content in S3
+            if (body.html) {
+              await this.storeEmailHtmlInS3(message.id, body.html);
+            }
 
             // Check if message is unread or starred based on Gmail labels
             const isUnread = message.labelIds?.includes('UNREAD') ?? false;
@@ -612,6 +675,11 @@ export class GmailServiceImpl implements GmailService {
             const headers = this.parseEmailHeaders(message.payload.headers);
             const body = this.extractEmailBody(message.payload);
 
+            // Store HTML content in S3
+            if (body.html) {
+              await this.storeEmailHtmlInS3(message.id, body.html);
+            }
+
             // Check if message is unread or starred based on Gmail labels
             const isUnread = message.labelIds?.includes('UNREAD') ?? false;
             const isStarred = message.labelIds?.includes('STARRED') ?? false;
@@ -786,28 +854,6 @@ export class GmailServiceImpl implements GmailService {
     });
   }
 
-  /**
-   * Get emails for a specific user
-   */
-  async getUserEmails(userId: string): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean; isImportant: boolean } })[]> {
-    return this.db.emailMessage.findMany({
-      where: {
-        userId,
-      },
-      include: {
-        thread: {
-          select: {
-            isRead: true,
-            isStarred: true,
-            isImportant: true,
-          },
-        },
-      },
-      orderBy: {
-        internalDate: 'desc',
-      },
-    });
-  }
 
   /**
    * Get emails for a specific user with pagination
@@ -874,6 +920,40 @@ export class GmailServiceImpl implements GmailService {
   }
 
   /**
+   * Get a specific email by ID with HTML content from S3
+   */
+  async getEmailByIdWithHtml(userId: string, emailId: string): Promise<{ email: EmailMessage & { thread: { isRead: boolean; isStarred: boolean; isImportant: boolean } }; html: string; textContent: string } | null> {
+    const email = await this.db.emailMessage.findFirst({
+      where: {
+        id: emailId,
+        userId,
+      },
+      include: {
+        thread: {
+          select: {
+            isRead: true,
+            isStarred: true,
+            isImportant: true,
+          },
+        },
+      },
+    });
+
+    if (!email) {
+      return null;
+    }
+
+    // Get HTML content from S3
+    const html = await this.s3Service.getEmailHtml(email.gmailMessageId);
+    
+    return {
+      email,
+      html: html ?? '',
+      textContent: email.textPlain ?? '',
+    };
+  }
+
+  /**
    * Get total count of messages in user's inbox
    */
   async getInboxTotalCount(userId: string): Promise<number> {
@@ -909,6 +989,7 @@ export class GmailServiceImpl implements GmailService {
       }
     }
   }
+
 
   /**
    * Sync emails with pagination - fetches first page immediately, rest in background
@@ -959,7 +1040,15 @@ export class GmailServiceImpl implements GmailService {
           for (const message of firstPageMessages) {
             try {
               const headers = this.parseEmailHeaders(message.payload.headers);
-              const body = this.extractEmailBody(message.payload);
+              
+              // Extract HTML using raw format and nodemailer
+              const body = await this.extractEmailBodyFromRaw(gmail, message.id);
+              
+              // Store HTML content in S3
+              if (body.html) {
+                await this.storeEmailHtmlInS3(message.id, body.html);
+              }
+              
               const isUnread = message.labelIds?.includes('UNREAD') ?? false;
               const isStarred = message.labelIds?.includes('STARRED') ?? false;
               const isImportant = message.labelIds?.includes('IMPORTANT') ?? false;
@@ -1110,7 +1199,15 @@ export class GmailServiceImpl implements GmailService {
               for (const message of messageBatch) {
                 try {
                   const headers = this.parseEmailHeaders(message.payload.headers);
-                  const body = this.extractEmailBody(message.payload);
+                  
+                  // Extract HTML using raw format and nodemailer
+                  const body = await this.extractEmailBodyFromRaw(gmail, message.id);
+                  
+                  // Store HTML content in S3
+                  if (body.html) {
+                    await this.storeEmailHtmlInS3(message.id, body.html);
+                  }
+                  
                   const isUnread = message.labelIds?.includes('UNREAD') ?? false;
                   const isStarred = message.labelIds?.includes('STARRED') ?? false;
                   const isImportant = message.labelIds?.includes('IMPORTANT') ?? false;
