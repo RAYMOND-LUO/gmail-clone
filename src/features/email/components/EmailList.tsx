@@ -41,6 +41,9 @@ export function EmailList() {
       refetchOnWindowFocus: false,
     }
   ));
+
+  // Fetch inbox count if we don't have it yet
+  const inboxCountQuery = useQuery(trpc.email.getInboxCount.queryOptions());
   
   // Use a wrapper function to handle type safety
   const getEmailData = (): PaginatedEmailResult | undefined => {
@@ -55,7 +58,8 @@ export function EmailList() {
 
   // Extract emails and pagination data with proper typing
   const localEmails: EmailWithThread[] = emailData?.emails ?? [];
-  const totalPages: number = Math.ceil(paginationInfo.totalInbox / 50);
+  const totalInboxCount = paginationInfo.totalInbox > 0 ? paginationInfo.totalInbox : (inboxCountQuery.data ?? 0);
+  const totalPages: number = Math.ceil(totalInboxCount / 50);
 
   // Use tRPC mutation for syncing emails
   const syncEmailsMutation = useMutation(
@@ -258,9 +262,9 @@ export function EmailList() {
           {isLoading ? (
             ""
           ) : emailList.length > 0 ? (
-            paginationInfo.totalInbox > 0
-              ? `1-${Math.min(emailList.length, 50)} of ${paginationInfo.totalInbox}`
-              : `1-${emailList.length} of ${emailList.length}`
+            totalInboxCount > 0
+              ? `${(currentPage - 1) * 50 + 1}-${(currentPage - 1) * 50 + emailList.length} of ${totalInboxCount}`
+              : `${(currentPage - 1) * 50 + 1}-${(currentPage - 1) * 50 + emailList.length} of ${(currentPage - 1) * 50 + emailList.length}`
           ) : (
             "No emails"
           )}
