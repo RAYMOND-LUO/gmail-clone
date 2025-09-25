@@ -320,6 +320,23 @@ export class GmailServiceImpl implements GmailService {
       // Step 2: Process messages in smaller batches with separate transactions
       const BATCH_SIZE = 10; // Process 10 messages per transaction to avoid timeout
 
+      // First, extract HTML content and store in S3 (outside transaction)
+      const htmlPromises: Promise<void>[] = [];
+      for (const message of allMessages) {
+        htmlPromises.push(
+          this.extractEmailBodyFromRaw(gmail, message.id).then(async (body) => {
+            if (body.html) {
+              await this.storeEmailHtmlInS3(message.id, body.html);
+            }
+          }).catch((error) => {
+            console.error(`Failed to process HTML for message ${message.id}:`, error);
+          })
+        );
+      }
+
+      // Wait for all HTML processing to complete
+      await Promise.all(htmlPromises);
+
       for (let i = 0; i < allMessages.length; i += BATCH_SIZE) {
         const messageBatch = allMessages.slice(i, Math.min(i + BATCH_SIZE, allMessages.length));
 
@@ -329,12 +346,7 @@ export class GmailServiceImpl implements GmailService {
             for (const message of messageBatch) {
               try {
                 const headers = this.parseEmailHeaders(message.payload.headers);
-                const body = this.extractEmailBody(message.payload);
-
-                // Store HTML content in S3
-                if (body.html) {
-                  await this.storeEmailHtmlInS3(message.id, body.html);
-                }
+                const body = this.extractEmailBody(message.payload); // Use legacy method for DB storage
 
                 // Check if message is unread or starred based on Gmail labels
                 const isUnread = message.labelIds?.includes('UNREAD') ?? false;
@@ -486,17 +498,29 @@ export class GmailServiceImpl implements GmailService {
       
       const messages = await this.fetchMessagesBatch(gmail, messageIds);
       
+      // First, extract HTML content and store in S3 (outside transaction)
+      const htmlPromises: Promise<void>[] = [];
+      for (const message of messages) {
+        htmlPromises.push(
+          this.extractEmailBodyFromRaw(gmail, message.id).then(async (body) => {
+            if (body.html) {
+              await this.storeEmailHtmlInS3(message.id, body.html);
+            }
+          }).catch((error) => {
+            console.error(`Failed to process HTML for message ${message.id}:`, error);
+          })
+        );
+      }
+
+      // Wait for all HTML processing to complete
+      await Promise.all(htmlPromises);
+      
       // Process messages in a transaction for data consistency
       await this.db.$transaction(async (tx) => {
         for (const message of messages) {
           try {
             const headers = this.parseEmailHeaders(message.payload.headers);
-            const body = this.extractEmailBody(message.payload);
-
-            // Store HTML content in S3
-            if (body.html) {
-              await this.storeEmailHtmlInS3(message.id, body.html);
-            }
+            const body = this.extractEmailBody(message.payload); // Use legacy method for DB storage
 
             // Check if message is unread or starred based on Gmail labels
             const isUnread = message.labelIds?.includes('UNREAD') ?? false;
@@ -668,17 +692,29 @@ export class GmailServiceImpl implements GmailService {
       // Fetch and process the new messages
       const messages = await this.fetchMessagesBatch(gmail, messageIds);
       
+      // First, extract HTML content and store in S3 (outside transaction)
+      const htmlPromises: Promise<void>[] = [];
+      for (const message of messages) {
+        htmlPromises.push(
+          this.extractEmailBodyFromRaw(gmail, message.id).then(async (body) => {
+            if (body.html) {
+              await this.storeEmailHtmlInS3(message.id, body.html);
+            }
+          }).catch((error) => {
+            console.error(`Failed to process HTML for message ${message.id}:`, error);
+          })
+        );
+      }
+
+      // Wait for all HTML processing to complete
+      await Promise.all(htmlPromises);
+      
       // Process messages in a transaction for data consistency
       await this.db.$transaction(async (tx) => {
         for (const message of messages) {
           try {
             const headers = this.parseEmailHeaders(message.payload.headers);
-            const body = this.extractEmailBody(message.payload);
-
-            // Store HTML content in S3
-            if (body.html) {
-              await this.storeEmailHtmlInS3(message.id, body.html);
-            }
+            const body = this.extractEmailBody(message.payload); // Use legacy method for DB storage
 
             // Check if message is unread or starred based on Gmail labels
             const isUnread = message.labelIds?.includes('UNREAD') ?? false;
@@ -1034,20 +1070,30 @@ export class GmailServiceImpl implements GmailService {
       const firstPageMessages = await this.fetchMessagesBatch(gmail, messageIds);
       console.log(`Fetched ${firstPageMessages.length} messages for first page`);
 
-      // Process first page in a transaction
+      // First, extract HTML content and store in S3 (outside transaction)
+      const htmlPromises: Promise<void>[] = [];
+      for (const message of firstPageMessages) {
+        htmlPromises.push(
+          this.extractEmailBodyFromRaw(gmail, message.id).then(async (body) => {
+            if (body.html) {
+              await this.storeEmailHtmlInS3(message.id, body.html);
+            }
+          }).catch((error) => {
+            console.error(`Failed to process HTML for message ${message.id}:`, error);
+          })
+        );
+      }
+
+      // Wait for all HTML processing to complete
+      await Promise.all(htmlPromises);
+
+      // Process first page in a transaction (without S3 operations)
       await this.db.$transaction(
         async (tx) => {
           for (const message of firstPageMessages) {
             try {
               const headers = this.parseEmailHeaders(message.payload.headers);
-              
-              // Extract HTML using raw format and nodemailer
-              const body = await this.extractEmailBodyFromRaw(gmail, message.id);
-              
-              // Store HTML content in S3
-              if (body.html) {
-                await this.storeEmailHtmlInS3(message.id, body.html);
-              }
+              const body = this.extractEmailBody(message.payload); // Use legacy method for DB storage
               
               const isUnread = message.labelIds?.includes('UNREAD') ?? false;
               const isStarred = message.labelIds?.includes('STARRED') ?? false;
@@ -1190,6 +1236,23 @@ export class GmailServiceImpl implements GmailService {
         const messages = await this.fetchMessagesBatch(gmail, messageIds);
         console.log(`[Background] Processing ${messages.length} messages from page ${pageCount}`);
 
+        // First, extract HTML content and store in S3 (outside transaction)
+        const htmlPromises: Promise<void>[] = [];
+        for (const message of messages) {
+          htmlPromises.push(
+            this.extractEmailBodyFromRaw(gmail, message.id).then(async (body) => {
+              if (body.html) {
+                await this.storeEmailHtmlInS3(message.id, body.html);
+              }
+            }).catch((error) => {
+              console.error(`Failed to process HTML for message ${message.id}:`, error);
+            })
+          );
+        }
+
+        // Wait for all HTML processing to complete
+        await Promise.all(htmlPromises);
+
         // Process in smaller batches to avoid long transactions
         for (let i = 0; i < messages.length; i += BATCH_SIZE) {
           const messageBatch = messages.slice(i, Math.min(i + BATCH_SIZE, messages.length));
@@ -1199,14 +1262,7 @@ export class GmailServiceImpl implements GmailService {
               for (const message of messageBatch) {
                 try {
                   const headers = this.parseEmailHeaders(message.payload.headers);
-                  
-                  // Extract HTML using raw format and nodemailer
-                  const body = await this.extractEmailBodyFromRaw(gmail, message.id);
-                  
-                  // Store HTML content in S3
-                  if (body.html) {
-                    await this.storeEmailHtmlInS3(message.id, body.html);
-                  }
+                  const body = this.extractEmailBody(message.payload); // Use legacy method for DB storage
                   
                   const isUnread = message.labelIds?.includes('UNREAD') ?? false;
                   const isStarred = message.labelIds?.includes('STARRED') ?? false;
