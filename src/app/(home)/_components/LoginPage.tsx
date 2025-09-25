@@ -3,8 +3,8 @@
 import { signIn } from "next-auth/react";
 import Image from "next/image";
 
-import { Button } from "~/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { Button } from "~/features/shared/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "~/features/shared/components/ui/card";
 
 export function LoginPage() {
   return (

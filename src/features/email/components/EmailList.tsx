@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
 
-import { Button } from "~/components/ui/button";
+import { Button } from "~/features/shared/components/ui/button";
 import { useTRPC } from "~/trpc/react";
 
 import { EmailTabs } from "./EmailTabs";

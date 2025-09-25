@@ -1,6 +1,6 @@
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
+import { Button } from "~/features/shared/components/ui/button";
+import { Input } from "~/features/shared/components/ui/input";
+import { Avatar, AvatarFallback, AvatarImage } from "~/features/shared/components/ui/avatar";
 import type { HeaderProps } from "~/types/components";
 
 /**
