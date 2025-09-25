@@ -29,6 +29,15 @@ type EmailWithThread = EmailMessage & {
  */
 export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
   const [localEmails, setLocalEmails] = useState<EmailWithThread[]>(emails);
+  const [paginationInfo, setPaginationInfo] = useState<{
+    totalInbox: number;
+    currentCount: number;
+    backgroundSyncActive: boolean;
+  }>({
+    totalInbox: 0,
+    currentCount: emails.length,
+    backgroundSyncActive: false,
+  });
   const trpc = useTRPC();
   const queryClient = useQueryClient();
 
@@ -45,6 +54,14 @@ export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
         if (data.emails) {
           setLocalEmails(data.emails);
         }
+        // Update pagination info
+        if (data.paginationInfo) {
+          setPaginationInfo({
+            totalInbox: data.paginationInfo.totalInbox,
+            currentCount: data.paginationInfo.currentCount,
+            backgroundSyncActive: data.paginationInfo.backgroundSyncActive,
+          });
+        }
         // Invalidate the email queries to refresh data elsewhere
         void queryClient.invalidateQueries({
           queryKey: trpc.email.getByUser.queryKey(),
@@ -55,6 +72,35 @@ export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
       }
     })
   );
+
+  // Periodically check for new emails synced in background
+  useEffect(() => {
+    if (!paginationInfo.backgroundSyncActive) return;
+
+    const interval = setInterval(() => {
+      void queryClient.invalidateQueries({
+        queryKey: trpc.email.getByUser.queryKey(),
+      }).then(() => {
+        // After invalidation, the component will re-render with new data
+        // from the tRPC query which should automatically fetch updated emails
+      }).catch((error) => {
+        console.error('Failed to refresh emails:', error);
+      });
+    }, 5000); // Check every 5 seconds
+
+    // Stop polling after 2 minutes or when we reach the total
+    const timeout = setTimeout(() => {
+      setPaginationInfo(prev => ({
+        ...prev,
+        backgroundSyncActive: false,
+      }));
+    }, 120000); // 2 minutes timeout
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, [paginationInfo.backgroundSyncActive, queryClient, trpc.email.getByUser]);
 
   // Manual refresh function
   const refreshEmails = async () => {
@@ -164,9 +210,14 @@ export function EmailList({ emails = [] }: { emails?: EmailWithThread[] }) {
           </Button>
         </div>
         <div className="mr-4 ml-auto text-sm text-gray-600">
-          {syncEmailsMutation.isPending && <span className="mr-2 text-blue-500">Syncing emails...</span>}
+          {syncEmailsMutation.isPending && <span className="mr-2 text-blue-500">Syncing first page...</span>}
+          {paginationInfo.backgroundSyncActive && (
+            <span className="mr-2 text-blue-500">Background sync in progress...</span>
+          )}
           {emailList.length > 0
-            ? `1-${emailList.length} of ${emailList.length}`
+            ? paginationInfo.totalInbox > 0
+              ? `1-${Math.min(emailList.length, 50)} of ${paginationInfo.totalInbox}`
+              : `1-${emailList.length} of ${emailList.length}`
             : "No emails"}
         </div>
         <div className="flex items-center space-x-2">

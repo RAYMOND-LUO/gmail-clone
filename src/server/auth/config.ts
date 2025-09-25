@@ -73,13 +73,13 @@ export const authConfig = {
           
           const gmailService = getGmailService(db);
           
-          // Run sync in background (don't wait for it to complete)
-          gmailService.syncUserEmails(user.id, 3, 100) // 3 pages, 100 messages per page
+          // Run paginated sync - fetch first page immediately, rest in background
+          gmailService.syncUserEmailsWithPagination(user.id, 50, true) // Fetch first 50, continue in background
             .then((result) => {
-              console.log(`Background sync completed for user ${user.id}:`, result);
+              console.log(`Initial sync completed for user ${user.id}:`, result);
             })
             .catch((error) => {
-              console.error(`Background sync failed for user ${user.id}:`, error);
+              console.error(`Initial sync failed for user ${user.id}:`, error);
             });
         } catch (error) {
           console.error("Failed to trigger Gmail sync on login:", error);

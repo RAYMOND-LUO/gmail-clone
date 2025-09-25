@@ -9,18 +9,28 @@ import { google } from "googleapis";
  */
 export interface GmailService {
   syncUserEmails(userId: string, maxPages?: number, messagesPerPage?: number): Promise<SyncResult>;
+  syncUserEmailsWithPagination(userId: string, pageSize?: number, continueInBackground?: boolean): Promise<PaginatedSyncResult>;
   syncAllUsersEmails(): Promise<AllUsersSyncResult>;
   syncUserEmailsDelta(userId: string, maxMessages?: number): Promise<SyncResult>;
   syncUserEmailsByHistory(userId: string, startHistoryId: string): Promise<SyncResult>;
   getAllEmails(): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean; isImportant: boolean } })[]>;
   getUserEmails(userId: string): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean; isImportant: boolean } })[]>;
   getEmailById(id: string): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean; isImportant: boolean } }) | null>;
+  getInboxTotalCount(userId: string): Promise<number>;
 }
 
 export interface SyncResult {
   synced: number;
   errors: number;
   totalPages: number;
+}
+
+export interface PaginatedSyncResult {
+  synced: number;
+  errors: number;
+  totalInbox: number;
+  pageSize: number;
+  backgroundTaskStarted: boolean;
 }
 
 export interface AllUsersSyncResult {
@@ -40,14 +50,27 @@ interface GmailApiError extends Error {
 interface GmailClient {
   users: {
     messages: {
-      list: (params: { userId: string; maxResults: number; pageToken?: string }) => Promise<{
+      list: (params: { userId: string; maxResults: number; pageToken?: string; labelIds?: string[] }) => Promise<{
         data: {
           messages?: Array<{ id: string }>;
           nextPageToken?: string;
+          resultSizeEstimate?: number;
         };
       }>;
       get: (params: { userId: string; id: string; format: string }) => Promise<{
         data: GmailMessage;
+      }>;
+    };
+    labels: {
+      get: (params: { userId: string; id: string }) => Promise<{
+        data: {
+          id: string;
+          name: string;
+          messagesTotal?: number;
+          messagesUnread?: number;
+          threadsTotal?: number;
+          threadsUnread?: number;
+        };
       }>;
     };
     history: {
@@ -911,6 +934,363 @@ export class GmailServiceImpl implements GmailService {
         },
       },
     });
+  }
+
+  /**
+   * Get total count of messages in user's inbox
+   */
+  async getInboxTotalCount(userId: string): Promise<number> {
+    console.log(`Getting total inbox count for user ${userId}`);
+
+    try {
+      const { gmail } = await this.getGmailClient(userId);
+
+      // Use Gmail labels API to get exact inbox count
+      const response = await this.retryWithBackoff(async () => {
+        return await gmail.users.labels.get({
+          userId: 'me',
+          id: 'INBOX',
+        });
+      });
+
+      // Return the total message count in inbox
+      return response.data.messagesTotal ?? 0;
+    } catch (error) {
+      console.error(`Failed to get inbox count for user ${userId}:`, error);
+      // Fallback to a list request with minimal data
+      try {
+        const { gmail } = await this.getGmailClient(userId);
+        const response = await gmail.users.messages.list({
+          userId: 'me',
+          maxResults: 1,
+          labelIds: ['INBOX'],
+        });
+        return response.data.resultSizeEstimate ?? 0;
+      } catch (fallbackError) {
+        console.error(`Fallback also failed:`, fallbackError);
+        return 0;
+      }
+    }
+  }
+
+  /**
+   * Sync emails with pagination - fetches first page immediately, rest in background
+   */
+  async syncUserEmailsWithPagination(
+    userId: string,
+    pageSize = 50,
+    continueInBackground = true
+  ): Promise<PaginatedSyncResult> {
+    console.log(`Starting paginated email sync for user ${userId}`);
+
+    try {
+      const { gmail } = await this.getGmailClient(userId);
+
+      // Get total inbox count first
+      const totalInbox = await this.getInboxTotalCount(userId);
+      console.log(`Total emails in inbox: ${totalInbox}`);
+
+      let totalSynced = 0;
+      let totalErrors = 0;
+      let backgroundTaskStarted = false;
+
+      // Step 1: Fetch first page of messages
+      console.log(`Fetching first ${pageSize} messages`);
+      const { messageIds, nextPageToken } = await this.fetchMessageIds(
+        gmail,
+        pageSize
+      );
+
+      if (messageIds.length === 0) {
+        console.log('No messages found in inbox');
+        return {
+          synced: 0,
+          errors: 0,
+          totalInbox,
+          pageSize,
+          backgroundTaskStarted: false,
+        };
+      }
+
+      // Fetch and process first page of messages
+      const firstPageMessages = await this.fetchMessagesBatch(gmail, messageIds);
+      console.log(`Fetched ${firstPageMessages.length} messages for first page`);
+
+      // Process first page in a transaction
+      await this.db.$transaction(
+        async (tx) => {
+          for (const message of firstPageMessages) {
+            try {
+              const headers = this.parseEmailHeaders(message.payload.headers);
+              const body = this.extractEmailBody(message.payload);
+              const isUnread = message.labelIds?.includes('UNREAD') ?? false;
+              const isStarred = message.labelIds?.includes('STARRED') ?? false;
+              const isImportant = message.labelIds?.includes('IMPORTANT') ?? false;
+
+              let thread = await tx.emailThread.findFirst({
+                where: {
+                  userId,
+                  gmailThreadId: message.threadId,
+                },
+              });
+
+              if (thread) {
+                thread = await tx.emailThread.update({
+                  where: { id: thread.id },
+                  data: {
+                    isRead: !isUnread,
+                    isStarred,
+                    isImportant,
+                    lastMessageAt: new Date(parseInt(message.internalDate)),
+                    snippet: message.snippet,
+                  },
+                });
+              } else {
+                thread = await tx.emailThread.create({
+                  data: {
+                    userId,
+                    gmailThreadId: message.threadId,
+                    subject: headers.subject,
+                    lastMessageAt: new Date(parseInt(message.internalDate)),
+                    snippet: message.snippet,
+                    isRead: !isUnread,
+                    isStarred,
+                    isImportant,
+                  },
+                });
+              }
+
+              await tx.emailMessage.upsert({
+                where: {
+                  userId_gmailMessageId: {
+                    userId,
+                    gmailMessageId: message.id,
+                  },
+                },
+                create: {
+                  userId,
+                  threadId: thread.id,
+                  gmailMessageId: message.id,
+                  internalDate: new Date(parseInt(message.internalDate)),
+                  from: headers.from,
+                  to: headers.to,
+                  cc: headers.cc,
+                  bcc: headers.bcc,
+                  subject: headers.subject,
+                  snippet: message.snippet,
+                  textPlain: body.text,
+                },
+                update: {
+                  snippet: message.snippet,
+                  thread: {
+                    update: {
+                      isRead: !isUnread,
+                      isStarred,
+                      isImportant,
+                    },
+                  },
+                },
+              });
+
+              totalSynced++;
+            } catch (error) {
+              console.error(`Error syncing message ${message.id}:`, error);
+              totalErrors++;
+            }
+          }
+        },
+        {
+          maxWait: 10000,
+          timeout: 30000,
+        }
+      );
+
+      console.log(`First page synced: ${totalSynced} messages`);
+
+      // Step 2: Continue fetching remaining messages in background if requested
+      if (continueInBackground && nextPageToken) {
+        backgroundTaskStarted = true;
+        console.log('Starting background sync for remaining messages...');
+
+        // Start background sync (non-blocking)
+        this.syncRemainingPagesInBackground(userId, gmail, nextPageToken, pageSize).catch((error) => {
+          console.error('Background sync failed:', error);
+        });
+      }
+
+      return {
+        synced: totalSynced,
+        errors: totalErrors,
+        totalInbox,
+        pageSize,
+        backgroundTaskStarted,
+      };
+    } catch (error) {
+      console.error(`Paginated sync failed for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Sync remaining pages in background (async, non-blocking)
+   */
+  private async syncRemainingPagesInBackground(
+    userId: string,
+    gmail: GmailClient,
+    startingPageToken: string,
+    messagesPerPage: number
+  ): Promise<void> {
+    let nextPageToken: string | undefined = startingPageToken;
+    let pageCount = 1; // Already fetched first page
+    const MAX_PAGES = 20; // Limit to prevent infinite loops
+    const BATCH_SIZE = 10; // Process messages in batches
+
+    try {
+      while (nextPageToken && pageCount < MAX_PAGES) {
+        pageCount++;
+        console.log(`[Background] Fetching page ${pageCount}`);
+
+        const { messageIds, nextPageToken: newNextPageToken } = await this.fetchMessageIds(
+          gmail,
+          messagesPerPage,
+          nextPageToken
+        );
+
+        nextPageToken = newNextPageToken;
+
+        if (messageIds.length === 0) break;
+
+        // Fetch messages for this page
+        const messages = await this.fetchMessagesBatch(gmail, messageIds);
+        console.log(`[Background] Processing ${messages.length} messages from page ${pageCount}`);
+
+        // Process in smaller batches to avoid long transactions
+        for (let i = 0; i < messages.length; i += BATCH_SIZE) {
+          const messageBatch = messages.slice(i, Math.min(i + BATCH_SIZE, messages.length));
+
+          await this.db.$transaction(
+            async (tx) => {
+              for (const message of messageBatch) {
+                try {
+                  const headers = this.parseEmailHeaders(message.payload.headers);
+                  const body = this.extractEmailBody(message.payload);
+                  const isUnread = message.labelIds?.includes('UNREAD') ?? false;
+                  const isStarred = message.labelIds?.includes('STARRED') ?? false;
+                  const isImportant = message.labelIds?.includes('IMPORTANT') ?? false;
+
+                  let thread = await tx.emailThread.findFirst({
+                    where: {
+                      userId,
+                      gmailThreadId: message.threadId,
+                    },
+                  });
+
+                  if (thread) {
+                    thread = await tx.emailThread.update({
+                      where: { id: thread.id },
+                      data: {
+                        isRead: !isUnread,
+                        isStarred,
+                        isImportant,
+                        lastMessageAt: new Date(parseInt(message.internalDate)),
+                        snippet: message.snippet,
+                      },
+                    });
+                  } else {
+                    thread = await tx.emailThread.create({
+                      data: {
+                        userId,
+                        gmailThreadId: message.threadId,
+                        subject: headers.subject,
+                        lastMessageAt: new Date(parseInt(message.internalDate)),
+                        snippet: message.snippet,
+                        isRead: !isUnread,
+                        isStarred,
+                        isImportant,
+                      },
+                    });
+                  }
+
+                  await tx.emailMessage.upsert({
+                    where: {
+                      userId_gmailMessageId: {
+                        userId,
+                        gmailMessageId: message.id,
+                      },
+                    },
+                    create: {
+                      userId,
+                      threadId: thread.id,
+                      gmailMessageId: message.id,
+                      internalDate: new Date(parseInt(message.internalDate)),
+                      from: headers.from,
+                      to: headers.to,
+                      cc: headers.cc,
+                      bcc: headers.bcc,
+                      subject: headers.subject,
+                      snippet: message.snippet,
+                      textPlain: body.text,
+                    },
+                    update: {
+                      snippet: message.snippet,
+                      thread: {
+                        update: {
+                          isRead: !isUnread,
+                          isStarred,
+                          isImportant,
+                        },
+                      },
+                    },
+                  });
+                } catch (error) {
+                  console.error(`[Background] Error syncing message ${message.id}:`, error);
+                }
+              }
+            },
+            {
+              maxWait: 10000,
+              timeout: 30000,
+            }
+          );
+        }
+
+        // Small delay between pages to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      // Update sync state
+      const account = await this.db.account.findFirst({
+        where: { userId, provider: 'google' },
+        select: { email: true },
+      });
+
+      const gmailAddress = account?.email ?? 'unknown@gmail.com';
+
+      await this.db.$transaction(async (tx) => {
+        await tx.gmailSyncState.upsert({
+          where: {
+            userId_provider_email: {
+              userId,
+              provider: 'google',
+              email: gmailAddress,
+            },
+          },
+          create: {
+            userId,
+            provider: 'google',
+            email: gmailAddress,
+            lastFullSync: new Date(),
+          },
+          update: {
+            lastFullSync: new Date(),
+          },
+        });
+      });
+
+      console.log(`[Background] Sync completed for user ${userId}, processed ${pageCount} pages`);
+    } catch (error) {
+      console.error(`[Background] Sync error for user ${userId}:`, error);
+    }
   }
 }
 
