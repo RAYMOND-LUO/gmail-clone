@@ -1,6 +1,6 @@
 "use client";
 
-import type { Email, EmailWithThread, PaginatedEmailResult } from "~/types/components";
+import type { Email, EmailWithThread } from "~/types/components";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
@@ -9,6 +9,7 @@ import { Button } from "~/components/ui/button";
 import { useTRPC } from "~/trpc/react";
 
 import { EmailTabs } from "./EmailTabs";
+import type { PaginatedEmailResult } from "~/types/gmail";
 
 /**
  * EmailList Component
@@ -48,7 +49,7 @@ export function EmailList() {
   // Use a wrapper function to handle type safety
   const getEmailData = (): PaginatedEmailResult | undefined => {
     if (query.data && typeof query.data === 'object' && 'emails' in query.data) {
-      return query.data as PaginatedEmailResult;
+      return query.data;
     }
     return undefined;
   };
@@ -157,6 +158,13 @@ export function EmailList() {
     );
   };
 
+  // Function to decode HTML entities
+  const decodeHtmlEntities = (text: string): string => {
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = text;
+    return textarea.value;
+  };
+
   // Transform EmailMessage to Email format
   const transformEmail = (email: EmailWithThread): Email => {
     const time = new Date(email.internalDate).toLocaleTimeString("en-US", {
@@ -190,7 +198,7 @@ export function EmailList() {
     return {
       from: extractSenderName(email.from),
       subject: email.subject ?? "No Subject",
-      snippet: email.snippet ?? "",
+      snippet: decodeHtmlEntities(email.snippet ?? ""),
       time,
       unread: !email.thread.isRead,
       starred: email.thread.isStarred,
@@ -342,11 +350,11 @@ export function EmailList() {
             return (
               <div
                 key={emailData.id}
-                className={`flex h-[40px] cursor-pointer items-center border-b border-neutral-200 px-4 py-3 transition-all duration-200 ${
+                className={`flex h-[40px] cursor-pointer items-center border border-neutral-100 px-4 py-3 transition-all duration-200 hover:shadow-2xl hover:border-neutral-400 ${
                   email.unread
-                    ? "bg-white font-medium hover:bg-gray-100"
-                    : "bg-gray-50 hover:bg-gray-100"
-                } hover:shadow-sm`}
+                    ? "bg-white font-medium"
+                    : "bg-[#f2f6fe]"
+                }`}
               >
                 {/* Checkbox */}
                 <div className="mr-3 flex-shrink-0">

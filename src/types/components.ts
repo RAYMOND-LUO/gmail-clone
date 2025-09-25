@@ -49,14 +49,6 @@ export type EmailWithThread = {
   };
 };
 
-// Paginated email result type for tRPC queries
-export type PaginatedEmailResult = {
-  emails: EmailWithThread[];
-  totalCount: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-};
 
 // Shared Components
 export type ReusableErrorBoundaryProps = {
