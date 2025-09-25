@@ -15,6 +15,7 @@ export interface GmailService {
   syncUserEmailsByHistory(userId: string, startHistoryId: string): Promise<SyncResult>;
   getAllEmails(): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean; isImportant: boolean } })[]>;
   getUserEmails(userId: string): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean; isImportant: boolean } })[]>;
+  getUserEmailsPaginated(userId: string, page: number, limit: number): Promise<PaginatedEmailResult>;
   getEmailById(id: string): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean; isImportant: boolean } }) | null>;
   getInboxTotalCount(userId: string): Promise<number>;
 }
@@ -37,6 +38,14 @@ export interface AllUsersSyncResult {
   totalUsers: number;
   totalSynced: number;
   totalErrors: number;
+  totalPages: number;
+}
+
+export interface PaginatedEmailResult {
+  emails: (EmailMessage & { thread: { isRead: boolean; isStarred: boolean; isImportant: boolean } })[];
+  totalCount: number;
+  page: number;
+  limit: number;
   totalPages: number;
 }
 
@@ -914,6 +923,50 @@ export class GmailServiceImpl implements GmailService {
         internalDate: 'desc',
       },
     });
+  }
+
+  /**
+   * Get emails for a specific user with pagination
+   */
+  async getUserEmailsPaginated(userId: string, page: number, limit: number): Promise<PaginatedEmailResult> {
+    const skip = (page - 1) * limit;
+
+    const [emails, totalCount] = await Promise.all([
+      this.db.emailMessage.findMany({
+        where: {
+          userId,
+        },
+        include: {
+          thread: {
+            select: {
+              isRead: true,
+              isStarred: true,
+              isImportant: true,
+            },
+          },
+        },
+        orderBy: {
+          internalDate: 'desc',
+        },
+        skip,
+        take: limit,
+      }),
+      this.db.emailMessage.count({
+        where: {
+          userId,
+        },
+      }),
+    ]);
+
+    const totalPages = Math.ceil(totalCount / limit);
+
+    return {
+      emails,
+      totalCount,
+      page,
+      limit,
+      totalPages,
+    };
   }
 
   /**

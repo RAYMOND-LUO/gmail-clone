@@ -14,6 +14,15 @@ export const emailRouter = createTRPCRouter({
     return ctx.gmailService.getUserEmails(ctx.session.user.id);
   }),
 
+  getByUserPaginated: protectedProcedure
+    .input(z.object({
+      page: z.number().min(1).default(1),
+      limit: z.number().min(1).max(100).default(50)
+    }))
+    .query(async ({ ctx, input }) => {
+      return ctx.gmailService.getUserEmailsPaginated(ctx.session.user.id, input.page, input.limit);
+    }),
+
   getEmailById: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
