@@ -1,6 +1,7 @@
 "use client";
 
 import type { Email, EmailWithThread } from "~/types/components";
+import type { PaginatedEmailResult } from "~/types/gmail";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
@@ -8,9 +9,8 @@ import Image from "next/image";
 import { Button } from "~/features/shared/components/ui/button";
 import { useTRPC } from "~/trpc/react";
 
-import { EmailTabs } from "./EmailTabs";
 import { EmailDetailView } from "./EmailDetailView";
-import type { PaginatedEmailResult } from "~/types/gmail";
+import { EmailTabs } from "./EmailTabs";
 
 /**
  * EmailList Component
@@ -37,31 +37,40 @@ export function EmailList() {
   const queryClient = useQueryClient();
 
   // Fetch paginated emails with proper typing
-  const query = useQuery(trpc.email.getByUserPaginated.queryOptions(
-    { page: currentPage, limit: 50 },
-    {
-      staleTime: 30000,
-      refetchOnWindowFocus: false,
-    }
-  ));
+  const query = useQuery(
+    trpc.email.getByUserPaginated.queryOptions(
+      { page: currentPage, limit: 50 },
+      {
+        staleTime: 30000,
+        refetchOnWindowFocus: false,
+      }
+    )
+  );
 
   // Fetch inbox count if we don't have it yet
   const inboxCountQuery = useQuery(trpc.email.getInboxCount.queryOptions());
-  
+
   // Use a wrapper function to handle type safety
   const getEmailData = (): PaginatedEmailResult | undefined => {
-    if (query.data && typeof query.data === 'object' && 'emails' in query.data) {
+    if (
+      query.data &&
+      typeof query.data === "object" &&
+      "emails" in query.data
+    ) {
       return query.data;
     }
     return undefined;
   };
-  
+
   const emailData = getEmailData();
   const isLoading = query.isLoading ?? false;
 
   // Extract emails and pagination data with proper typing
   const localEmails: EmailWithThread[] = emailData?.emails ?? [];
-  const totalInboxCount = paginationInfo.totalInbox > 0 ? paginationInfo.totalInbox : (inboxCountQuery.data ?? 0);
+  const totalInboxCount =
+    paginationInfo.totalInbox > 0
+      ? paginationInfo.totalInbox
+      : (inboxCountQuery.data ?? 0);
   const totalPages: number = Math.ceil(totalInboxCount / 50);
 
   // Use tRPC mutation for syncing emails
@@ -86,6 +95,16 @@ export function EmailList() {
       },
     })
   );
+
+  // Mark email as read mutation
+  const markEmailAsRead = async (emailId: string) => {
+    // TODO: Implement mark as read API call
+    console.log("Marking email as read:", emailId);
+    // For now, we'll just invalidate the queries to refresh the UI
+    void queryClient.invalidateQueries({
+      queryKey: trpc.email.getByUserPaginated.queryKey(),
+    });
+  };
 
   // Periodically check for new emails synced in background
   useEffect(() => {
@@ -144,6 +163,8 @@ export function EmailList() {
   // Handle email click to show detail view
   const handleEmailClick = (emailId: string) => {
     setSelectedEmailId(emailId);
+    // Mark email as read when clicked
+    void markEmailAsRead(emailId);
   };
 
   // Handle back button to return to email list
@@ -172,7 +193,7 @@ export function EmailList() {
 
   // Function to decode HTML entities
   const decodeHtmlEntities = (text: string): string => {
-    const textarea = document.createElement('textarea');
+    const textarea = document.createElement("textarea");
     textarea.innerHTML = text;
     return textarea.value;
   };
@@ -226,10 +247,7 @@ export function EmailList() {
   // If an email is selected, show the detail view
   if (selectedEmailId) {
     return (
-      <EmailDetailView 
-        emailId={selectedEmailId} 
-        onBack={handleBackToList} 
-      />
+      <EmailDetailView emailId={selectedEmailId} onBack={handleBackToList} />
     );
   }
 
@@ -280,7 +298,9 @@ export function EmailList() {
           </Button>
         </div>
         <div className="mr-4 ml-auto text-sm text-gray-600">
-          {isLoading && <span className="mr-2 text-neutral-300">Loading...</span>}
+          {isLoading && (
+            <span className="mr-2 text-neutral-300">Loading...</span>
+          )}
           {syncEmailsMutation.isPending && (
             <span className="mr-2 text-neutral-300">Syncing emails...</span>
           )}
@@ -289,15 +309,13 @@ export function EmailList() {
               Background sync in progress...
             </span>
           )}
-          {isLoading ? (
-            ""
-          ) : emailList.length > 0 ? (
-            totalInboxCount > 0
-              ? `${(currentPage - 1) * 50 + 1}-${(currentPage - 1) * 50 + emailList.length} of ${totalInboxCount}`
-              : `${(currentPage - 1) * 50 + 1}-${(currentPage - 1) * 50 + emailList.length} of ${(currentPage - 1) * 50 + emailList.length}`
-          ) : (
-            "No emails"
-          )}
+          {isLoading
+            ? ""
+            : emailList.length > 0
+              ? totalInboxCount > 0
+                ? `${(currentPage - 1) * 50 + 1}-${(currentPage - 1) * 50 + emailList.length} of ${totalInboxCount}`
+                : `${(currentPage - 1) * 50 + 1}-${(currentPage - 1) * 50 + emailList.length} of ${(currentPage - 1) * 50 + emailList.length}`
+              : "No emails"}
         </div>
         <div className="flex items-center space-x-2">
           <Button
@@ -356,7 +374,9 @@ export function EmailList() {
               <div className="mb-2">
                 <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></div>
               </div>
-              <p className="text-lg font-medium text-neutral-400">Loading emails...</p>
+              <p className="text-lg font-medium text-neutral-400">
+                Loading emails...
+              </p>
             </div>
           </div>
         ) : emailList.length === 0 ? (
@@ -372,10 +392,8 @@ export function EmailList() {
             return (
               <div
                 key={emailData.id}
-                className={`flex h-[40px] cursor-pointer items-center border border-neutral-100 px-4 py-3 transition-all duration-200 hover:shadow-2xl hover:border-neutral-400 ${
-                  email.unread
-                    ? "bg-white font-medium"
-                    : "bg-[#f2f6fe]"
+                className={`group flex h-[40px] cursor-pointer items-center border border-neutral-100 px-4 py-3 transition-all duration-200 hover:border-neutral-400 hover:shadow-2xl ${
+                  email.unread ? "bg-white font-medium" : "bg-[#f2f6fe]"
                 }`}
                 onClick={() => handleEmailClick(emailData.id)}
               >
@@ -420,7 +438,10 @@ export function EmailList() {
                     size="icon"
                     className="h-6 w-6"
                     onClick={() =>
-                      void toggleImportant(emailData.id, email.important ?? false)
+                      void toggleImportant(
+                        emailData.id,
+                        email.important ?? false
+                      )
                     }
                   >
                     <Image
@@ -461,7 +482,62 @@ export function EmailList() {
                     {email.snippet}
                   </span>
                 </div>
+                {/* Hover Actions */}
+                <div className="mx-1 flex items-center gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                  {/* Mark as Unread */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 hover:bg-gray-200"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // TODO: Implement mark as unread functionality
+                      console.log("Mark as unread:", emailData.id);
+                    }}
+                    title="Mark as unread"
+                  >
+                    <svg
+                      className="h-4 w-4 text-gray-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                      />
+                    </svg>
+                  </Button>
 
+                  {/* Delete */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 hover:bg-red-100 hover:text-red-600"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // TODO: Implement delete functionality
+                      console.log("Delete email:", emailData.id);
+                    }}
+                    title="Delete"
+                  >
+                    <svg
+                      className="h-4 w-4 text-gray-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                      />
+                    </svg>
+                  </Button>
+                </div>
                 {/* Time */}
                 <div className="flex-shrink-0 text-right">
                   <span
