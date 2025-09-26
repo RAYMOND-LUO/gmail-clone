@@ -17,6 +17,9 @@ export interface GmailService {
   getEmailById(id: string): Promise<(EmailMessage & { thread: { isRead: boolean; isStarred: boolean; isImportant: boolean } }) | null>;
   getEmailByIdWithHtml(userId: string, emailId: string): Promise<EmailWithHtml | null>;
   getInboxTotalCount(userId: string): Promise<number>;
+  markEmailAsRead(userId: string, emailId: string): Promise<void>;
+  markEmailAsUnread(userId: string, emailId: string): Promise<void>;
+  deleteEmail(userId: string, emailId: string): Promise<void>;
 }
 
 export interface SyncResult {

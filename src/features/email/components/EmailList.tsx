@@ -97,14 +97,49 @@ export function EmailList() {
   );
 
   // Mark email as read mutation
-  const markEmailAsRead = async (emailId: string) => {
-    // TODO: Implement mark as read API call
-    console.log("Marking email as read:", emailId);
-    // For now, we'll just invalidate the queries to refresh the UI
-    void queryClient.invalidateQueries({
-      queryKey: trpc.email.getByUserPaginated.queryKey(),
-    });
-  };
+  const markAsReadMutation = useMutation(
+    trpc.email.markAsRead.mutationOptions({
+      onSuccess: () => {
+        // Invalidate queries to refresh the UI
+        void queryClient.invalidateQueries({
+          queryKey: trpc.email.getByUserPaginated.queryKey(),
+        });
+      },
+      onError: (error) => {
+        console.error("Failed to mark email as read:", error);
+      },
+    })
+  );
+
+  // Mark email as unread mutation
+  const markAsUnreadMutation = useMutation(
+    trpc.email.markAsUnread.mutationOptions({
+      onSuccess: () => {
+        // Invalidate queries to refresh the UI
+        void queryClient.invalidateQueries({
+          queryKey: trpc.email.getByUserPaginated.queryKey(),
+        });
+      },
+      onError: (error) => {
+        console.error("Failed to mark email as unread:", error);
+      },
+    })
+  );
+
+  // Delete email mutation
+  const deleteEmailMutation = useMutation(
+    trpc.email.deleteEmail.mutationOptions({
+      onSuccess: () => {
+        // Invalidate queries to refresh the UI
+        void queryClient.invalidateQueries({
+          queryKey: trpc.email.getByUserPaginated.queryKey(),
+        });
+      },
+      onError: (error) => {
+        console.error("Failed to delete email:", error);
+      },
+    })
+  );
 
   // Periodically check for new emails synced in background
   useEffect(() => {
@@ -164,7 +199,7 @@ export function EmailList() {
   const handleEmailClick = (emailId: string) => {
     setSelectedEmailId(emailId);
     // Mark email as read when clicked
-    void markEmailAsRead(emailId);
+    void markAsReadMutation.mutateAsync({ emailId });
   };
 
   // Handle back button to return to email list
@@ -491,8 +526,7 @@ export function EmailList() {
                     className="h-6 w-6 hover:bg-gray-200"
                     onClick={(e) => {
                       e.stopPropagation();
-                      // TODO: Implement mark as unread functionality
-                      console.log("Mark as unread:", emailData.id);
+                      void markAsUnreadMutation.mutateAsync({ emailId: emailData.id });
                     }}
                     title="Mark as unread"
                   >
@@ -518,8 +552,7 @@ export function EmailList() {
                     className="h-6 w-6 hover:bg-red-100 hover:text-red-600"
                     onClick={(e) => {
                       e.stopPropagation();
-                      // TODO: Implement delete functionality
-                      console.log("Delete email:", emailData.id);
+                      void deleteEmailMutation.mutateAsync({ emailId: emailData.id });
                     }}
                     title="Delete"
                   >

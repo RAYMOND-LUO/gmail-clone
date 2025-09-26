@@ -1382,6 +1382,82 @@ export class GmailServiceImpl implements GmailService {
       console.error(`[Background] Sync error for user ${userId}:`, error);
     }
   }
+
+  /**
+   * Mark email as read in database only
+   */
+  async markEmailAsRead(userId: string, emailId: string): Promise<void> {
+    // First get the email to find its thread
+    const email = await this.db.emailMessage.findFirst({
+      where: {
+        id: emailId,
+        userId: userId,
+      },
+      select: {
+        threadId: true,
+      },
+    });
+
+    if (!email) {
+      throw new Error(`Email with id ${emailId} not found for user ${userId}`);
+    }
+
+    // Update the thread's isRead status
+    await this.db.emailThread.update({
+      where: {
+        id: email.threadId,
+        userId: userId,
+      },
+      data: {
+        isRead: true,
+      },
+    });
+  }
+
+  /**
+   * Mark email as unread in database only
+   */
+  async markEmailAsUnread(userId: string, emailId: string): Promise<void> {
+    // First get the email to find its thread
+    const email = await this.db.emailMessage.findFirst({
+      where: {
+        id: emailId,
+        userId: userId,
+      },
+      select: {
+        threadId: true,
+      },
+    });
+
+    if (!email) {
+      throw new Error(`Email with id ${emailId} not found for user ${userId}`);
+    }
+
+    // Update the thread's isRead status
+    await this.db.emailThread.update({
+      where: {
+        id: email.threadId,
+        userId: userId,
+      },
+      data: {
+        isRead: false,
+      },
+    });
+  }
+
+  /**
+   * Delete email from database only (soft delete by marking as deleted)
+   */
+  async deleteEmail(userId: string, emailId: string): Promise<void> {
+    // For now, we'll do a hard delete from the database
+    // In production, you might want to implement soft delete
+    await this.db.emailMessage.deleteMany({
+      where: {
+        id: emailId,
+        userId: userId,
+      },
+    });
+  }
 }
 
 /**

@@ -58,4 +58,37 @@ export const emailRouter = createTRPCRouter({
   getInboxCount: protectedProcedure.query(async ({ ctx }) => {
     return ctx.gmailService.getInboxTotalCount(ctx.session.user.id);
   }),
+
+  markAsRead: protectedProcedure
+    .input(z.object({ emailId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        await ctx.gmailService.markEmailAsRead(ctx.session.user.id, input.emailId);
+        return { success: true };
+      } catch (error) {
+        throw new Error(`Failed to mark email as read: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }),
+
+  markAsUnread: protectedProcedure
+    .input(z.object({ emailId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        await ctx.gmailService.markEmailAsUnread(ctx.session.user.id, input.emailId);
+        return { success: true };
+      } catch (error) {
+        throw new Error(`Failed to mark email as unread: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }),
+
+  deleteEmail: protectedProcedure
+    .input(z.object({ emailId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        await ctx.gmailService.deleteEmail(ctx.session.user.id, input.emailId);
+        return { success: true };
+      } catch (error) {
+        throw new Error(`Failed to delete email: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }),
 });
