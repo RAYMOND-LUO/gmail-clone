@@ -9,6 +9,7 @@ import { Button } from "~/features/shared/components/ui/button";
 import { useTRPC } from "~/trpc/react";
 
 import { EmailTabs } from "./EmailTabs";
+import { EmailDetailView } from "./EmailDetailView";
 import type { PaginatedEmailResult } from "~/types/gmail";
 
 /**
@@ -22,6 +23,7 @@ import type { PaginatedEmailResult } from "~/types/gmail";
  */
 export function EmailList() {
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
   const [paginationInfo, setPaginationInfo] = useState<{
     totalInbox: number;
     currentCount: number;
@@ -139,6 +141,16 @@ export function EmailList() {
     await syncEmailsMutation.mutateAsync();
   };
 
+  // Handle email click to show detail view
+  const handleEmailClick = (emailId: string) => {
+    setSelectedEmailId(emailId);
+  };
+
+  // Handle back button to return to email list
+  const handleBackToList = () => {
+    setSelectedEmailId(null);
+  };
+
   // Toggle star status
   const toggleStar = async (emailId: string, currentStarred: boolean) => {
     // TODO: Implement star toggle API call
@@ -211,6 +223,16 @@ export function EmailList() {
       ? localEmails.map(transformEmail)
       : [];
 
+  // If an email is selected, show the detail view
+  if (selectedEmailId) {
+    return (
+      <EmailDetailView 
+        emailId={selectedEmailId} 
+        onBack={handleBackToList} 
+      />
+    );
+  }
+
   return (
     <div className="flex-1 rounded-2xl bg-white">
       {/* Toolbar */}
@@ -258,12 +280,12 @@ export function EmailList() {
           </Button>
         </div>
         <div className="mr-4 ml-auto text-sm text-gray-600">
-          {isLoading && <span className="mr-2 text-blue-500">Loading...</span>}
+          {isLoading && <span className="mr-2 text-neutral-300">Loading...</span>}
           {syncEmailsMutation.isPending && (
-            <span className="mr-2 text-blue-500">Syncing emails...</span>
+            <span className="mr-2 text-neutral-300">Syncing emails...</span>
           )}
           {paginationInfo.backgroundSyncActive && (
-            <span className="mr-2 text-blue-500">
+            <span className="mr-2 text-neutral-300">
               Background sync in progress...
             </span>
           )}
@@ -334,7 +356,7 @@ export function EmailList() {
               <div className="mb-2">
                 <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></div>
               </div>
-              <p className="text-lg font-medium">Loading emails...</p>
+              <p className="text-lg font-medium text-neutral-400">Loading emails...</p>
             </div>
           </div>
         ) : emailList.length === 0 ? (
@@ -355,6 +377,7 @@ export function EmailList() {
                     ? "bg-white font-medium"
                     : "bg-[#f2f6fe]"
                 }`}
+                onClick={() => handleEmailClick(emailData.id)}
               >
                 {/* Checkbox */}
                 <div className="mr-3 flex-shrink-0">
@@ -371,7 +394,7 @@ export function EmailList() {
                     size="icon"
                     className="h-6 w-6"
                     onClick={() =>
-                      toggleStar(emailData.id, email.starred ?? false)
+                      void toggleStar(emailData.id, email.starred ?? false)
                     }
                   >
                     <svg
@@ -397,7 +420,7 @@ export function EmailList() {
                     size="icon"
                     className="h-6 w-6"
                     onClick={() =>
-                      toggleImportant(emailData.id, email.important ?? false)
+                      void toggleImportant(emailData.id, email.important ?? false)
                     }
                   >
                     <Image

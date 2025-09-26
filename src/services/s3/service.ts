@@ -30,7 +30,6 @@ export class S3ServiceImpl implements S3Service {
       Key: key,
       Body: html,
       ContentType: 'text/html',
-      // Optional: Add metadata
       Metadata: {
         emailId,
         createdAt: new Date().toISOString(),
