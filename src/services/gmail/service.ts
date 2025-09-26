@@ -11,7 +11,7 @@ import type {
   OAuth2Client,
   GmailMessage
 } from "~/types/gmail";
-import { getS3Service } from '~/services/s3/service';
+import { type S3Service } from '~/services/s3/service';
 import * as mailparser from 'mailparser';
 
 
@@ -22,10 +22,8 @@ import * as mailparser from 'mailparser';
  * Uses googleapis library for token refresh and rate limiting
  */
 export class GmailServiceImpl implements GmailService {
-  private s3Service: ReturnType<typeof getS3Service>;
 
-  constructor(private readonly db: PrismaClient) {
-    this.s3Service = getS3Service();
+  constructor(private readonly db: PrismaClient, private readonly s3Service: S3Service) {
   }
 
   /**
@@ -1464,6 +1462,6 @@ export class GmailServiceImpl implements GmailService {
  * Factory function for creating GmailService instances
  * This is the dependency injection entry point
  */
-export const getGmailService = (db: PrismaClient): GmailService => {
-  return new GmailServiceImpl(db);
+export const getGmailService = (db: PrismaClient, s3Service: S3Service): GmailService => {
+  return new GmailServiceImpl(db, s3Service);
 };

@@ -17,6 +17,7 @@ import { getPostService } from "~/services/post/service";
 import { getGmailService } from "~/services/gmail/service";
 
 import { db } from "../db";
+import { getS3Service } from "~/services/s3/service";
 
 /**
  * Injects services that require authentication
@@ -30,7 +31,8 @@ import { db } from "../db";
  */
 export function injectProtectedServices() {
   const postService = getPostService(db);
-  const gmailService = getGmailService(db);
+  const s3Service = getS3Service();
+  const gmailService = getGmailService(db, s3Service);
 
   return {
     postService,
