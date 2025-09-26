@@ -96,47 +96,168 @@ export function EmailList() {
     })
   );
 
-  // Mark email as read mutation
+  // Mark email as read mutation with optimistic update
   const markAsReadMutation = useMutation(
     trpc.email.markAsRead.mutationOptions({
-      onSuccess: () => {
-        // Invalidate queries to refresh the UI
+      onMutate: async ({ emailId }) => {
+        // Cancel any outgoing refetches
+        await queryClient.cancelQueries({
+          queryKey: trpc.email.getByUserPaginated.queryKey(),
+        });
+
+        // Snapshot the previous value
+        const previousData = queryClient.getQueryData(
+          trpc.email.getByUserPaginated.queryKey({ page: currentPage, limit: 50 })
+        );
+
+        // Optimistically update to the new value
+        queryClient.setQueryData(
+          trpc.email.getByUserPaginated.queryKey({ page: currentPage, limit: 50 }),
+          (old: PaginatedEmailResult | undefined) => {
+            if (!old?.emails) return old;
+            return {
+              ...old,
+              emails: old.emails.map((email) => {
+                if (email.id === emailId) {
+                  return {
+                    ...email,
+                    thread: {
+                      ...email.thread,
+                      isRead: true, // Mark as read
+                    },
+                  };
+                }
+                return email;
+              }),
+            };
+          }
+        );
+
+        // Return a context object with the snapshotted value
+        return { previousData };
+      },
+      onError: (error, _variables, context) => {
+        console.error("Failed to mark email as read:", error);
+        // If the mutation fails, use the context returned from onMutate to roll back
+        if (context?.previousData) {
+          queryClient.setQueryData(
+            trpc.email.getByUserPaginated.queryKey({ page: currentPage, limit: 50 }),
+            context.previousData
+          );
+        }
+      },
+      onSettled: () => {
+        // Always refetch after error or success to sync with server
         void queryClient.invalidateQueries({
           queryKey: trpc.email.getByUserPaginated.queryKey(),
         });
       },
-      onError: (error) => {
-        console.error("Failed to mark email as read:", error);
-      },
     })
   );
 
-  // Mark email as unread mutation
+  // Mark email as unread mutation with optimistic update
   const markAsUnreadMutation = useMutation(
     trpc.email.markAsUnread.mutationOptions({
-      onSuccess: () => {
-        // Invalidate queries to refresh the UI
+      onMutate: async ({ emailId }) => {
+        // Cancel any outgoing refetches
+        await queryClient.cancelQueries({
+          queryKey: trpc.email.getByUserPaginated.queryKey(),
+        });
+
+        // Snapshot the previous value
+        const previousData = queryClient.getQueryData(
+          trpc.email.getByUserPaginated.queryKey({ page: currentPage, limit: 50 })
+        );
+
+        // Optimistically update to the new value
+        queryClient.setQueryData(
+          trpc.email.getByUserPaginated.queryKey({ page: currentPage, limit: 50 }),
+          (old: PaginatedEmailResult | undefined) => {
+            if (!old?.emails) return old;
+            return {
+              ...old,
+              emails: old.emails.map((email) => {
+                if (email.id === emailId) {
+                  return {
+                    ...email,
+                    thread: {
+                      ...email.thread,
+                      isRead: false, // Mark as unread
+                    },
+                  };
+                }
+                return email;
+              }),
+            };
+          }
+        );
+
+        // Return a context object with the snapshotted value
+        return { previousData };
+      },
+      onError: (error, _variables, context) => {
+        console.error("Failed to mark email as unread:", error);
+        // If the mutation fails, use the context returned from onMutate to roll back
+        if (context?.previousData) {
+          queryClient.setQueryData(
+            trpc.email.getByUserPaginated.queryKey({ page: currentPage, limit: 50 }),
+            context.previousData
+          );
+        }
+      },
+      onSettled: () => {
+        // Always refetch after error or success to sync with server
         void queryClient.invalidateQueries({
           queryKey: trpc.email.getByUserPaginated.queryKey(),
         });
-      },
-      onError: (error) => {
-        console.error("Failed to mark email as unread:", error);
       },
     })
   );
 
-  // Delete email mutation
+  // Delete email mutation with optimistic update
   const deleteEmailMutation = useMutation(
     trpc.email.deleteEmail.mutationOptions({
-      onSuccess: () => {
-        // Invalidate queries to refresh the UI
+      onMutate: async ({ emailId }) => {
+        // Cancel any outgoing refetches
+        await queryClient.cancelQueries({
+          queryKey: trpc.email.getByUserPaginated.queryKey(),
+        });
+
+        // Snapshot the previous value
+        const previousData = queryClient.getQueryData(
+          trpc.email.getByUserPaginated.queryKey({ page: currentPage, limit: 50 })
+        );
+
+        // Optimistically update to the new value by removing the email
+        queryClient.setQueryData(
+          trpc.email.getByUserPaginated.queryKey({ page: currentPage, limit: 50 }),
+          (old: PaginatedEmailResult | undefined) => {
+            if (!old?.emails) return old;
+            return {
+              ...old,
+              emails: old.emails.filter((email) => email.id !== emailId),
+            };
+          }
+        );
+
+        // Return a context object with the snapshotted value
+        return { previousData };
+      },
+      onError: (error, _variables, context) => {
+        console.error("Failed to delete email:", error);
+        // If the mutation fails, use the context returned from onMutate to roll back
+        if (context?.previousData) {
+          queryClient.setQueryData(
+            trpc.email.getByUserPaginated.queryKey({ page: currentPage, limit: 50 }),
+            context.previousData
+          );
+        }
+      },
+      onSettled: () => {
+        // Always refetch after error or success to sync with server
         void queryClient.invalidateQueries({
           queryKey: trpc.email.getByUserPaginated.queryKey(),
         });
-      },
-      onError: (error) => {
-        console.error("Failed to delete email:", error);
       },
     })
   );
@@ -196,10 +317,12 @@ export function EmailList() {
   };
 
   // Handle email click to show detail view
-  const handleEmailClick = (emailId: string) => {
+  const handleEmailClick = (emailId: string, isUnread: boolean) => {
     setSelectedEmailId(emailId);
-    // Mark email as read when clicked
-    void markAsReadMutation.mutateAsync({ emailId });
+    // Mark email as read when clicked (only if unread)
+    if (isUnread) {
+      void markAsReadMutation.mutateAsync({ emailId });
+    }
   };
 
   // Handle back button to return to email list
@@ -430,7 +553,7 @@ export function EmailList() {
                 className={`group flex h-[40px] cursor-pointer items-center border border-neutral-100 px-4 py-3 transition-all duration-200 hover:border-neutral-400 hover:shadow-2xl ${
                   email.unread ? "bg-white font-medium" : "bg-[#f2f6fe]"
                 }`}
-                onClick={() => handleEmailClick(emailData.id)}
+                onClick={() => handleEmailClick(emailData.id, email.unread)}
               >
                 {/* Checkbox */}
                 <div className="mr-3 flex-shrink-0">
@@ -519,16 +642,20 @@ export function EmailList() {
                 </div>
                 {/* Hover Actions */}
                 <div className="mx-1 flex items-center gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                  {/* Mark as Unread */}
+                  {/* Toggle Read/Unread */}
                   <Button
                     variant="ghost"
                     size="icon"
                     className="h-6 w-6 hover:bg-gray-200"
                     onClick={(e) => {
                       e.stopPropagation();
-                      void markAsUnreadMutation.mutateAsync({ emailId: emailData.id });
+                      if (email.unread) {
+                        void markAsReadMutation.mutateAsync({ emailId: emailData.id });
+                      } else {
+                        void markAsUnreadMutation.mutateAsync({ emailId: emailData.id });
+                      }
                     }}
-                    title="Mark as unread"
+                    title={email.unread ? "Mark as read" : "Mark as unread"}
                   >
                     <svg
                       className="h-4 w-4 text-gray-600"
