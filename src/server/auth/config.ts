@@ -3,6 +3,7 @@ import { type DefaultSession, type NextAuthConfig } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 
 import { db } from "~/server/db";
+import { getS3Service } from "~/services/s3/service";
 
 /**
  * Module augmentation for `next-auth` types. Allows us to add custom properties to the `session`
@@ -71,7 +72,7 @@ export const authConfig = {
           const { getGmailService } = await import("~/services/gmail/service");
           const { db } = await import("~/server/db");
           
-          const gmailService = getGmailService(db);
+          const gmailService = getGmailService(db, getS3Service());
           
           // Run paginated sync - fetch first page immediately, rest in background
           gmailService.syncUserEmailsWithPagination(user.id, 50, true) // Fetch first 50, continue in background

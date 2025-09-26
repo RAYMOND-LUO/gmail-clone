@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { getGmailService } from "~/services/gmail/service";
 import { db } from "~/server/db";
+import { getS3Service } from "~/services/s3/service";
 
 /**
  * Gmail Email Sync API Endpoint
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Start the sync process using dependency injection
-    const gmailService = getGmailService(db);
+    const gmailService = getGmailService(db, getS3Service());
     const result = await gmailService.syncAllUsersEmails();
     
     return NextResponse.json({

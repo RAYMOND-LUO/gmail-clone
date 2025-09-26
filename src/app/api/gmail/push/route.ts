@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { getGmailService } from "~/services/gmail/service";
 import { db } from "~/server/db";
+import { getS3Service } from "~/services/s3/service";
 
 /**
  * Gmail Push Notification Webhook
@@ -76,7 +77,7 @@ export async function POST(request: NextRequest) {
     const userId = user.id;
     
     // Get the Gmail service and sync new emails
-    const gmailService = getGmailService(db);
+    const gmailService = getGmailService(db, getS3Service());
     
     try {
       // Get the last known historyId for this user
